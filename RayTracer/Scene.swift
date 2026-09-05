@@ -615,7 +615,7 @@ final class CSGScene {
         print("스포츠카: 오브젝트 \(objects.count)개 · 인스턴스 \(placements.count)개")
 
         focusCenter = [0, 4.4, 0]
-        focusRadius = 21.5
+        focusRadius = 25.5          // 차 반장 23.2 + 여유. 21.5 였을 때 3/4 뷰에서 코가 잘렸다
         focusHalfHeight = 6.5
         focusElevation = 0.12
         minElevation = 0.03

@@ -20,25 +20,28 @@ enum SportsCar {
         let black: Int, leather: Int, lamp: Int, amber: Int, red: Int
     }
 
-    static let axleX: Float = 12.2, wheelY: Float = 3.3, trackZ: Float = 6.9
-    static let sillY: Float = 2.5
+    // 실측: 전장 4,453 · 전폭 1,657 · 휠베이스 2,438 · 트랙 1,270 · 타이어 6.40×15 (지름 ≈ 660) mm
+    static let axleX: Float = 12.2, wheelY: Float = 3.3, trackZ: Float = 6.35
+    static let sillY: Float = 3.0          // 로커 아랫선은 허브 높이 근처 — 사진 비교로 잡았다
 
     // MARK: - 차체
 
     /// 차체 원소 — blob 과 CPU 표면 계산(`surfaceY`)이 같은 목록을 쓴다
     static let bodyElements: [B] = [
-            B.ell([ 18.2, 5.0, 0], [5.2, 2.05, 5.6], blend: 2.2),                // 코 — 길게 좁아지며
-            B.ell([ 21.9, 4.65, 0], [2.3, 1.45, 3.5], blend: 1.6),                // 코끝 — 살짝 처진 뾰족한 끝
-            B.ell([ 12.0, 5.4, 0], [10.5, 2.5, 7.0], blend: 2.4),                // 보닛 — 앞으로 갈수록 낮게
-            B.ell([  3.0, 5.7, 0], [6.5, 2.7, 7.9], blend: 2.4),                 // 카울
-            B.ell([ -4.0, 5.5, 0], [8.0, 2.65, 8.3], blend: 2.4),                // 도어 — 허리선을 낮게
-            B.ell([-12.0, 5.6, 0], [8.0, 2.5, 7.8], blend: 2.4),                 // 리어 데크
-            B.ell([-19.0, 5.0, 0], [4.0, 2.2, 6.2], blend: 2.2),                 // 꼬리
-            B.ell([ 10.0, 7.6, 0], [7.5, 0.55, 2.0], blend: 1.6),                // 보닛 파워 벌지 (낮게)
-            B.ell([ axleX, 5.4,  6.0], [5.6, 3.2, 2.3], blend: 1.6),             // 앞 펜더
-            B.ell([ axleX, 5.4, -6.0], [5.6, 3.2, 2.3], blend: 1.6),
-            B.ell([-axleX, 5.4,  6.0], [6.0, 3.2, 2.3], blend: 1.6),             // 뒤 펜더
-            B.ell([-axleX, 5.4, -6.0], [6.0, 3.2, 2.3], blend: 1.6),
+            // 사진 비교(out/car-compare.png)로 잡은 것: 허리선은 거의 수평, 펜더는 그 위로 솟지 않는
+            // **은근한 힙**, 전장 4.49 m (앞 오버행 1.08 · 뒤 0.97)
+            B.ell([ 17.5, 5.0, 0], [5.5, 2.0, 5.6], blend: 1.8),                 // 코 — 길게 좁아지며
+            B.ell([ 21.0, 4.45, 0], [2.0, 1.3, 3.4], blend: 1.4),                 // 코끝 — 살짝 처진 뾰족한 끝
+            B.ell([ 11.5, 5.5, 0], [10.5, 2.5, 7.0], blend: 1.9),                // 보닛 — 앞으로 갈수록 낮게
+            B.ell([  3.0, 5.7, 0], [6.5, 2.65, 7.9], blend: 1.9),                // 카울
+            B.ell([ -4.0, 5.5, 0], [8.0, 2.6, 8.3], blend: 1.9),                 // 도어 — 허리선 0.81 m
+            B.ell([-12.0, 5.5, 0], [8.0, 2.45, 7.8], blend: 1.9),                // 리어 데크
+            B.ell([-18.3, 5.0, 0], [3.6, 2.1, 6.2], blend: 1.8),                 // 꼬리
+            B.ell([ 10.0, 7.5, 0], [7.5, 0.5, 2.0], blend: 1.5),                 // 보닛 파워 벌지 (낮게)
+            B.ell([ axleX, 5.0,  6.2], [5.8, 2.4, 2.1], blend: 1.5),             // 앞 펜더 — 허리선 아래에서만 부푼다
+            B.ell([ axleX, 5.0, -6.2], [5.8, 2.4, 2.1], blend: 1.5),
+            B.ell([-axleX, 5.0,  6.2], [6.2, 2.4, 2.1], blend: 1.5),             // 뒤 펜더
+            B.ell([-axleX, 5.0, -6.2], [6.2, 2.4, 2.1], blend: 1.5),
     ]
 
     static func bodyBlob(_ mat: Int, inflate: Float = 0) -> CSG {
@@ -93,7 +96,7 @@ enum SportsCar {
         // 콕핏 (오픈 로드스터)
         b = b - CSG.roundBox(half: [5.4, 3.4, 6.1], radius: 0.8, .translate(-3.2, 9.6, 0), material: m.black)
         // 그릴 입 — 타원
-        b = b - CSG.sphere(.translate(23.0, 4.9, 0) * .scale(2.4, 1.25, 2.6), material: m.black)
+        b = b - CSG.sphere(.translate(23.2, 4.7, 0) * .scale(2.4, 1.2, 2.6), material: m.black)
         // 헤드라이트 자리
         for s: Float in [1, -1] {
             b = b - CSG.sphere(.translate(19.0, 6.3, 5.0 * s) * .scale(1.5, 1.3, 1.5), material: m.black)
@@ -129,23 +132,23 @@ enum SportsCar {
         var parts: [CSG] = []
         // 그릴 링 (얇은 타원 고리) + 가로 바. rotateZ(90) 뒤에는 로컬 x 가 세계 y 다 —
         // 스케일을 (높이, 두께, 폭) 순으로 넣어야 가로로 긴 타원이 된다 (처음에 세로 타원이 됐다)
-        parts.append(CSG.cylinder(.translate(22.3, 4.9, 0) * .rotateZ(90) * .scale(1.42, 0.14, 2.75), material: m.chrome)
-                   - CSG.cylinder(.translate(22.3, 4.9, 0) * .rotateZ(90) * .scale(1.20, 0.4, 2.48), material: m.chrome))
-        parts.append(CSG.roundBox(half: [0.25, 0.12, 2.5], radius: 0.08, .translate(22.15, 4.9, 0), material: m.chrome))
+        parts.append(CSG.cylinder(.translate(22.5, 4.7, 0) * .rotateZ(90) * .scale(1.35, 0.14, 2.7), material: m.chrome)
+                   - CSG.cylinder(.translate(22.5, 4.7, 0) * .rotateZ(90) * .scale(1.14, 0.4, 2.44), material: m.chrome))
+        parts.append(CSG.roundBox(half: [0.25, 0.12, 2.5], radius: 0.08, .translate(22.35, 4.7, 0), material: m.chrome))
         // 앞 쿼터 범퍼 둘
         for s: Float in [1, -1] {
             parts.append(CSG.roundBox(half: [0.45, 0.32, 2.4], radius: 0.25,
-                                      .translate(22.2, 4.3, 5.0 * s) * .rotateY(-12 * s), material: m.chrome))
+                                      .translate(22.5, 4.0, 4.9 * s) * .rotateY(-12 * s), material: m.chrome))
         }
         // 뒤 범퍼 + 오버라이더
-        parts.append(CSG.roundBox(half: [0.42, 0.35, 7.2], radius: 0.28, .translate(-22.6, 4.4, 0), material: m.chrome))
+        parts.append(CSG.roundBox(half: [0.42, 0.35, 7.2], radius: 0.28, .translate(-21.8, 4.4, 0), material: m.chrome))
         for s: Float in [1, -1] {
-            parts.append(CSG.roundBox(half: [0.55, 0.9, 0.55], radius: 0.25, .translate(-22.8, 4.9, 4.2 * s), material: m.chrome))
+            parts.append(CSG.roundBox(half: [0.55, 0.9, 0.55], radius: 0.25, .translate(-22.0, 4.9, 4.2 * s), material: m.chrome))
         }
         // 배기관 둘
         for s: Float in [1, -1] {
-            parts.append(CSG.cylinder(.translate(-23.0, 2.4, 1.1 * s) * .rotateZ(90) * .scale(0.38, 1.4, 0.38), material: m.chrome)
-                       - CSG.cylinder(.translate(-23.6, 2.4, 1.1 * s) * .rotateZ(90) * .scale(0.28, 1.0, 0.28), material: m.black))
+            parts.append(CSG.cylinder(.translate(-22.2, 2.4, 1.1 * s) * .rotateZ(90) * .scale(0.38, 1.4, 0.38), material: m.chrome)
+                       - CSG.cylinder(.translate(-22.8, 2.4, 1.1 * s) * .rotateZ(90) * .scale(0.28, 1.0, 0.28), material: m.black))
         }
         // 도어 손잡이 · 사이드미러
         for s: Float in [1, -1] {
@@ -166,7 +169,7 @@ enum SportsCar {
         }
         // 테일램프 · 방향지시등
         for s: Float in [1, -1] {
-            parts.append(CSG.roundBox(half: [0.25, 0.55, 0.7], radius: 0.2, .translate(-22.3, 6.1, 6.2 * s) * .rotateY(-25 * s), material: m.red))
+            parts.append(CSG.roundBox(half: [0.25, 0.55, 0.7], radius: 0.2, .translate(-21.5, 6.1, 6.2 * s) * .rotateY(-25 * s), material: m.red))
             parts.append(CSG.roundBox(half: [0.25, 0.4, 0.55], radius: 0.18, .translate(21.4, 4.1, 6.3 * s) * .rotateY(25 * s), material: m.amber))
         }
         return CSG.unionAll(parts)
@@ -212,11 +215,11 @@ enum SportsCar {
     /// 번호판 — 앞은 범퍼 아래 브래킷, 뒤는 오버라이더 사이. 1960년대 영국식 흰 글자/검은 판은
     /// 글자를 못 새기니 노란 판에 검은 테두리로 "판" 으로만 읽히게 한다
     static func plates(_ m: Materials, plate: Int) -> CSG {
-        let rear = CSG.roundBox(half: [0.06, 0.62, 2.35], radius: 0.04, .translate(-23.05, 5.65, 0) * .rotateZ(6), material: plate)
-                 | CSG.roundBox(half: [0.04, 0.50, 2.20], radius: 0.03, .translate(-23.12, 5.65, 0) * .rotateZ(6), material: m.black)
-        let front = CSG.roundBox(half: [0.06, 0.60, 2.35], radius: 0.04, .translate(22.85, 3.15, 0) * .rotateZ(-8), material: plate)
-                  | CSG.roundBox(half: [0.04, 0.48, 2.20], radius: 0.03, .translate(22.92, 3.15, 0) * .rotateZ(-8), material: m.black)
-                  | CSG.roundBox(half: [0.5, 0.12, 0.3], radius: 0.05, .translate(22.3, 3.75, 0), material: m.black)   // 브래킷
+        let rear = CSG.roundBox(half: [0.06, 0.62, 2.35], radius: 0.04, .translate(-22.25, 5.65, 0) * .rotateZ(6), material: plate)
+                 | CSG.roundBox(half: [0.04, 0.50, 2.20], radius: 0.03, .translate(-22.32, 5.65, 0) * .rotateZ(6), material: m.black)
+        let front = CSG.roundBox(half: [0.06, 0.60, 2.35], radius: 0.04, .translate(23.05, 2.95, 0) * .rotateZ(-8), material: plate)
+                  | CSG.roundBox(half: [0.04, 0.48, 2.20], radius: 0.03, .translate(23.12, 2.95, 0) * .rotateZ(-8), material: m.black)
+                  | CSG.roundBox(half: [0.5, 0.12, 0.3], radius: 0.05, .translate(22.5, 3.55, 0), material: m.black)   // 브래킷
         return rear | front
     }
 

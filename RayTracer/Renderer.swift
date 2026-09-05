@@ -116,6 +116,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
     private var samplesPerPixel: Int = 1
     private var exposure: Float = 1.25
     private var maxBounces: Int = 6
+    private var fogStart: Float = 28
     private var focusRadius: Float = 5.4
     private var focusHalfHeight: Float = 2.5
 
@@ -159,6 +160,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         samplesPerPixel = scene.samplesPerPixel
         exposure = scene.exposure
         maxBounces = scene.maxBounces
+        fogStart = scene.fogStart
         focusHalfHeight = scene.focusHalfHeight
         camera.elevation = scene.focusElevation
         minElevation = scene.minElevation
@@ -342,6 +344,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         u.spp = UInt32(interacting ? 1 : samplesPerPixel)
         u.exposure = exposure
         u.maxBounces = UInt32(maxBounces)
+        u.fogStart = fogStart
         return u
     }
 

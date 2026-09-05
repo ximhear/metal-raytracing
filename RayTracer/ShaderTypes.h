@@ -180,6 +180,8 @@ typedef struct {
     unsigned int  rowOffset;
     /// 최대 바운스 (기본 6). 유리가 수백 개인 씬은 4 로 — 스레드 하나가 너무 오래 돌면 GPU 가 죽인다.
     unsigned int  maxBounces;
+    /// 거리 안개가 시작하는 거리 (기본 28). 제품 씬은 크게 — 전장 45 짜리 차의 뒤쪽이 뿌예진다.
+    float         fogStart;
 } Uniforms;
 
 #endif /* ShaderTypes_h */

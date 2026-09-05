@@ -1488,7 +1488,8 @@ static float3 shadePixel(float2 uv, constant Uniforms& u,
 
     // 거리 안개 — 지면이 끝나는 딱딱한 경계를 지우고 원경에 공기감을 준다
     if (primaryT > 0.0f) {
-        float fog = 1.0f - exp(-max(primaryT - 28.0f, 0.0f) * 0.0055f);
+        float fog0 = (u.fogStart > 0.0f) ? u.fogStart : 28.0f;
+        float fog = 1.0f - exp(-max(primaryT - fog0, 0.0f) * 0.0055f);
         result = mix(result, skyColor(primaryDir, u.lightDir, u.envMode), clamp(fog, 0.0f, 1.0f));
     }
 

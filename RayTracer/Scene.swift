@@ -142,6 +142,8 @@ final class CSGScene {
     var exposure: Float = 1.25
     /// 최대 바운스 (≤ 6). 유리가 수백 개인 씬은 4 — 스레드가 너무 오래 돌면 GPU 가 스레드그룹을 죽인다.
     var maxBounces: Int = 6
+    /// 거리 안개 시작 거리. 야외 씬 28, 제품·실내 씬은 200 (없는 것과 같다)
+    var fogStart: Float = 28
     /// 태양(키 라이트) 방향. nil 이면 환경 기본값.
     /// **인물은 조명 방향이 곧 인상이다** — 머리 위에서 내리쬐면 눈확·코 밑에 검은 그림자가 앉아
     /// 누구든 해골처럼 보인다. 카메라 쪽 위에서 비추는 "뷰티 라이트"가 정석.
@@ -462,6 +464,7 @@ final class CSGScene {
         focusHalfHeight = 9.9
         focusElevation = 0.08          // 살짝 아래에서 올려다봐야 영웅적이다
         environment = .brightStudio    // 사진은 밝은 전시장 — 어두운 스튜디오에선 금이 회색으로 죽는다
+        fogStart = 200
         exposure = 1.35
         samplesPerPixel = 4            // 패널 라인·볼트는 픽셀보다 가늘다
         sunDirection = simd_normalize(SIMD3<Float>(0.35, 0.85, 0.65))
@@ -561,6 +564,7 @@ final class CSGScene {
         focusElevation = 0.07
         minElevation = -0.12
         environment = .brightStudio    // 실내 — 벽이 보이려면 앰비언트가 있어야 한다
+        fogStart = 200
         exposure = 1.3
         samplesPerPixel = 4
         maxBounces = 4
@@ -616,6 +620,7 @@ final class CSGScene {
         focusElevation = 0.12
         minElevation = 0.03
         environment = .brightStudio    // 캔디 도장은 비칠 것이 있어야 산다 — 수평 라이트 바가 옆구리에 흐른다
+        fogStart = 200
         exposure = 1.25
         samplesPerPixel = 4
         maxBounces = 4
@@ -661,6 +666,7 @@ final class CSGScene {
     private func productLighting() {
         minElevation = 0.10            // 탁자면이 초점 바로 아래라 조금만 내려가도 탁자 속이다
         environment = .whiteCyc
+        fogStart = 200
         sunDirection = simd_normalize(SIMD3<Float>(0.30, 0.90, 0.45))
         shadowSoftness = 0.06
         samplesPerPixel = 4

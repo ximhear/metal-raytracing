@@ -27,7 +27,8 @@ enum SportsCar {
 
     /// 차체 원소 — blob 과 CPU 표면 계산(`surfaceY`)이 같은 목록을 쓴다
     static let bodyElements: [B] = [
-            B.ell([ 19.8, 4.9, 0], [3.4, 1.9, 4.9], blend: 2.0),                 // 코 — 낮고 뾰족하게
+            B.ell([ 18.2, 5.0, 0], [5.2, 2.05, 5.6], blend: 2.2),                // 코 — 길게 좁아지며
+            B.ell([ 21.9, 4.65, 0], [2.3, 1.45, 3.5], blend: 1.6),                // 코끝 — 살짝 처진 뾰족한 끝
             B.ell([ 12.0, 5.4, 0], [10.5, 2.5, 7.0], blend: 2.4),                // 보닛 — 앞으로 갈수록 낮게
             B.ell([  3.0, 5.7, 0], [6.5, 2.7, 7.9], blend: 2.4),                 // 카울
             B.ell([ -4.0, 5.5, 0], [8.0, 2.65, 8.3], blend: 2.4),                // 도어 — 허리선을 낮게
@@ -217,6 +218,53 @@ enum SportsCar {
                   | CSG.roundBox(half: [0.04, 0.48, 2.20], radius: 0.03, .translate(22.92, 3.15, 0) * .rotateZ(-8), material: m.black)
                   | CSG.roundBox(half: [0.5, 0.12, 0.3], radius: 0.05, .translate(22.3, 3.75, 0), material: m.black)   // 브래킷
         return rear | front
+    }
+
+    /// 작은 소품 — 보닛 배지 · 트렁크 엠블럼 · 워셔 노즐 · 주유구 캡 · 안테나. 전부 표면 높이를 재서 얹는다
+    static func trim(_ m: Materials) -> CSG {
+        var parts: [CSG] = []
+        // 보닛 앞 원형 배지 (크롬 테 + 검은 중심)
+        do {
+            let x: Float = 17.0, z: Float = 0
+            let y = surfaceY(x, z)
+            let n = surfaceNormal([x, y, z])
+            let f = float4x4.translate(x, y, z) * IronMan.alignY(n)
+            parts.append(CSG.cylinder(f * .scale(0.55, 0.05, 0.55), material: m.chrome))
+            parts.append(CSG.cylinder(f * .translate(0, 0.03, 0) * .scale(0.42, 0.04, 0.42), material: m.black))
+        }
+        // 워셔 노즐 둘 — 카울 위 작은 크롬 돔
+        for z in [-1.7, 1.7] as [Float] {
+            let x: Float = 2.9
+            let y = surfaceY(x, z)
+            parts.append(CSG.sphere(.translate(x, y, z) * .scale(0.12, 0.09, 0.12), material: m.chrome))
+        }
+        // 주유구 캡 — 왼쪽 리어 데크, 경첩 달린 크롬 원판
+        do {
+            let x: Float = -14.5, z: Float = 5.6
+            let y = surfaceY(x, z)
+            let n = surfaceNormal([x, y, z])
+            let f = float4x4.translate(x, y, z) * IronMan.alignY(n)
+            parts.append(CSG.cylinder(f * .scale(0.75, 0.06, 0.75), material: m.chrome))
+            parts.append(CSG.roundBox(half: [0.12, 0.08, 0.5], radius: 0.04, f * .translate(0.62, 0.06, 0), material: m.chrome))  // 경첩
+            parts.append(CSG.roundBox(half: [0.5, 0.05, 0.1], radius: 0.03, f * .translate(0, 0.08, 0), material: m.chrome))     // 손잡이
+        }
+        // 트렁크 엠블럼 — 가운데 가는 크롬 바 + 작은 원
+        do {
+            let x: Float = -17.5, z: Float = 0
+            let y = surfaceY(x, z)
+            let n = surfaceNormal([x, y, z])
+            let f = float4x4.translate(x, y, z) * IronMan.alignY(n)
+            parts.append(CSG.roundBox(half: [0.10, 0.03, 1.4], radius: 0.02, f, material: m.chrome))
+            parts.append(CSG.cylinder(f * .translate(0.35, 0, 0) * .scale(0.28, 0.04, 0.28), material: m.chrome))
+        }
+        // 안테나 — 오른쪽 뒤 펜더에서 비스듬히
+        do {
+            let x: Float = -11.0, z: Float = -7.2
+            let y = surfaceY(x, z)
+            parts.append(CSG.cylinder(.translate(x, y, z) * .scale(0.22, 0.08, 0.22), material: m.chrome))
+            parts.append(CSG.cylinder(.translate(x - 0.9, y + 3.6, z) * .rotateZ(14) * .scale(0.035, 3.7, 0.035), material: m.chrome))
+        }
+        return CSG.unionAll(parts)
     }
 
     static func glassParts(_ m: Materials) -> CSG {

@@ -595,11 +595,13 @@ final class CSGScene {
             SportsCar.louvre(m),                               // 8 ×26
             SportsCar.wipers(m),                               // 9
             SportsCar.plates(m, plate: plate),                 // 10
+            SportsCar.trim(m),                                 // 11
         ]
         placements = [Placement(objectIndex: 0, transform: .translate(0, -0.2, 0)),
                       Placement(objectIndex: 7, transform: .identity),
                       Placement(objectIndex: 9, transform: .identity),
-                      Placement(objectIndex: 10, transform: .identity)]
+                      Placement(objectIndex: 10, transform: .identity),
+                      Placement(objectIndex: 11, transform: .identity)]
         placements += (1...4).map { Placement(objectIndex: $0, transform: .identity) }
         placements += SportsCar.louvrePlacements().map { Placement(objectIndex: 8, transform: $0) }
         for w in SportsCar.wheelPlacements() {

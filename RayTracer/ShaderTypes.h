@@ -50,7 +50,7 @@
 //               유기적인 형상을 만들 수 없다. BLOB 은 SDF 를 구 추적(sphere tracing)해서
 //               **원소들이 이어 붙는 자리를 아예 없앤다.**
 //               partData[reserved0] = (halfX, halfY, halfZ, boundRadius)  ← AABB + 경계구
-//               partData[reserved0+1] = (원소 수, inflate, 0, 0)
+//               partData[reserved0+1] = (원소 수, inflate, 최대 스텝(0 = 기본 160), 0)
 //                 inflate: SDF 에서 그냥 빼는 값 = **정확한 오프셋 표면.** 옷을 만들 때 쓴다.
 //               이후 원소마다 float4 **네 개**:
 //                 A = (p0.xyz, r0), B = (p1.xyz 또는 (ry,rz,0), r1), C = (blend, sign, type, -)

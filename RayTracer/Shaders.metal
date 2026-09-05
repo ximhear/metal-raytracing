@@ -727,11 +727,14 @@ static void candBlob(float3 o, float3 d, constant float4* D, thread Cands& c) {
     float sq = sqrt(disc);
     float u = -b - sq, uMax = -b + sq;      // 경계구 안 구간 (원점이 안이면 u 는 음수)
 
+    // 스텝 상한은 blob 마다 (헤더 D[1].z). 가는 튜브(샹들리에 팔)는 100 이면 충분하고,
+    // 스텝을 줄이는 것이 스레드 길이를 줄이는 가장 직접적인 방법이다.
+    int steps = (D[1].z > 0.0f) ? min((int)D[1].z, BLOB_MAX_STEPS) : BLOB_MAX_STEPS;
     // 스텝 수 × 최소 스텝 > 구간 길이 여야 실루엣에서 중도 포기하지 않는다
-    float minStep = max(0.0025f, (uMax - u) * 0.0075f);   // 160 스텝 × 0.0075 > 구간 길이
+    float minStep = max(0.0025f, (uMax - u) * 1.2f / float(steps));
     float sPrev = blobSDF(o + dn * u, D, n, inflate);
 
-    for (int i = 0; i < BLOB_MAX_STEPS && u < uMax && c.n < MAX_CANDS; i++) {
+    for (int i = 0; i < steps && u < uMax && c.n < MAX_CANDS; i++) {
         float step = max(fabs(sPrev) * 0.8f, minStep);
         float u2 = min(u + step, uMax);
         float s2 = blobSDF(o + dn * u2, D, n, inflate);

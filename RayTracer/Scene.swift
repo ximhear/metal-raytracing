@@ -51,7 +51,7 @@ final class CSGScene {
             case .turbofan:     return "터보팬 제트엔진 커터웨이"
             case .face:         return "여성 얼굴"
             case .ironMan:      return "아이언맨"
-            case .chandelier:   return "크리스털 샹들리에"
+            case .chandelier:   return "파티룸의 샹들리에"
             case .glasses:      return "안경"
             case .sunglasses:   return "썬글라스"
             case .showcase:     return "부품 전시장"
@@ -76,7 +76,7 @@ final class CSGScene {
             case .ironMan:
                 return "붉은 캔디 도장 · 금색 거울 · 발광 눈과 아크 리액터 — 갑옷 판 60여 장"
             case .chandelier:
-                return "깎은 크리스털 500여 개를 인스턴싱 · 베지에 황동 팔 · 촛불 발광"
+                return "크리스털 450개 · 샴페인 잔 · 케이크 · 풍선 · 전구 줄 · 깃발 — 인스턴스 700개"
             case .glasses:
                 return "라운드 검은 림 + 로즈골드 다리 · 베지에 튜브 · 굴절률 1.5 유리 렌즈"
             case .sunglasses:
@@ -468,38 +468,96 @@ final class CSGScene {
             crystal: addMaterial([0.985, 0.99, 1.0], type: MATERIAL_GLASS, ior: 1.55),
             candle:  addMaterial([0.96, 0.94, 0.88], gloss: 0.30, sss: 0.4),          // 밀랍
             flame:   addMaterial([5.5, 3.6, 1.4], type: MATERIAL_EMISSIVE))            // 따뜻한 전구
-        let floor = addMaterial([0.05, 0.045, 0.045], gloss: 0.45, grain: 0.12)         // 어두운 대리석
+
+        // 파티룸
+        let r = PartyRoom.Materials(
+            floor: addMaterial([0.17, 0.11, 0.07], gloss: 0.55, grain: 0.35),          // 어두운 나무
+            wall:  addMaterial([0.62, 0.50, 0.42], gloss: 0.06),                        // 따뜻한 회벽
+            panel: addMaterial([0.40, 0.27, 0.20], gloss: 0.30),                        // 아랫벽 나무 패널
+            cloth: addMaterial([0.93, 0.92, 0.88], gloss: 0.08, sss: 0.2),
+            wood:  addMaterial([0.22, 0.13, 0.08], gloss: 0.5),
+            glass: addMaterial([0.97, 0.98, 0.99], type: MATERIAL_GLASS, ior: 1.50),
+            champagne: addMaterial([0.95, 0.80, 0.42], type: MATERIAL_GLASS, ior: 1.36),
+            bottle: addMaterial([0.12, 0.30, 0.12], type: MATERIAL_GLASS, ior: 1.50),
+            foil:  addMaterial([0.90, 0.72, 0.36], type: MATERIAL_SATIN, gloss: 0.8),
+            cream: addMaterial([0.96, 0.94, 0.90], gloss: 0.25, sss: 0.3),
+            pink:  addMaterial([0.95, 0.62, 0.70], gloss: 0.25, sss: 0.3),
+            candle: addMaterial([0.95, 0.93, 0.85], gloss: 0.3),
+            flame: addMaterial([5.0, 3.2, 1.2], type: MATERIAL_EMISSIVE),
+            bulb:  addMaterial([3.2, 2.4, 1.3], type: MATERIAL_EMISSIVE),
+            wire:  addMaterial([0.08, 0.07, 0.06], gloss: 0.3),
+            ribbon: addMaterial([0.92, 0.75, 0.30], type: MATERIAL_SATIN, gloss: 0.7),
+            balloons: [addMaterial([0.92, 0.72, 0.26], gloss: 0.92), addMaterial([0.92, 0.40, 0.55], gloss: 0.92),
+                       addMaterial([0.22, 0.62, 0.64], gloss: 0.92), addMaterial([0.94, 0.93, 0.90], gloss: 0.92)],
+            flags: [addMaterial([0.90, 0.30, 0.32], gloss: 0.1), addMaterial([0.95, 0.80, 0.30], gloss: 0.1),
+                    addMaterial([0.30, 0.55, 0.80], gloss: 0.1)],
+            gifts: [addMaterial([0.75, 0.15, 0.20], gloss: 0.6), addMaterial([0.20, 0.35, 0.70], gloss: 0.6),
+                    addMaterial([0.95, 0.95, 0.93], gloss: 0.5)])
 
         objects = [
-            CSG.box(.scale(200, 0.2, 200), material: floor),   // 0
-            Chandelier.stem(m),                                // 1
-            Chandelier.arm(m),                                 // 2 ×8
-            Chandelier.pendant(m),                             // 3 ×84
-            Chandelier.bead(m),                                // 4 ×224
-            Chandelier.centerBall(m),                          // 5
-            Chandelier.chainLink(m),                           // 6 ×N
+            Chandelier.stem(m),                                // 0
+            Chandelier.arm(m),                                 // 1 ×8
+            Chandelier.pendant(m),                             // 2 ×116
+            Chandelier.bead(m),                                // 3 ×336
+            Chandelier.centerBall(m),                          // 4
+            Chandelier.chainLink(m),                           // 5 ×N
+            PartyRoom.table(r),                                // 6
+            PartyRoom.flute(r),                                // 7 ×12
+            PartyRoom.bottle(r),                               // 8 ×2
+            PartyRoom.cake(r),                                 // 9
+            PartyRoom.bulb(r),                                 // 10 ×117
+            PartyRoom.wires(r),                                // 11
         ]
-        placements = [Placement(objectIndex: 0, transform: .translate(0, -12, 0)),
-                      Placement(objectIndex: 1, transform: .identity),
-                      Placement(objectIndex: 5, transform: .identity)]
-        placements += Chandelier.armPlacements().map { Placement(objectIndex: 2, transform: $0) }
-        placements += Chandelier.pendantPlacements().map { Placement(objectIndex: 3, transform: $0) }
-        placements += Chandelier.beadPlacements().map { Placement(objectIndex: 4, transform: $0) }
-        for i in 0..<14 {
-            placements.append(Placement(objectIndex: 6,
+        placements = [Placement(objectIndex: 0, transform: .identity),
+                      Placement(objectIndex: 4, transform: .identity),
+                      Placement(objectIndex: 6, transform: .identity),
+                      Placement(objectIndex: 9, transform: .translate(-5.5, PartyRoom.tableTop, 0.8)),
+                      Placement(objectIndex: 11, transform: .identity)]
+        placements += Chandelier.armPlacements().map { Placement(objectIndex: 1, transform: $0) }
+        placements += Chandelier.pendantPlacements().map { Placement(objectIndex: 2, transform: $0) }
+        placements += Chandelier.beadPlacements().map { Placement(objectIndex: 3, transform: $0) }
+        for i in 0..<16 {
+            placements.append(Placement(objectIndex: 5,
                 transform: .translate(0, 5.3 + Float(i) * 0.36, 0) * .rotateY(Float(i % 2) * 90)))
         }
-        print("샹들리에: 오브젝트 \(objects.count)개 · 인스턴스 \(placements.count)개")
+        // 샴페인 잔 — 테이블 위 두 줄
+        for i in 0..<12 {
+            let x = -9.0 + Float(i % 6) * 3.6 + Float(i / 6) * 1.2
+            let z: Float = i < 6 ? -2.6 : 2.4
+            placements.append(Placement(objectIndex: 7, transform: .translate(x, PartyRoom.tableTop, z) * .rotateY(Float(i) * 37)))
+        }
+        placements.append(Placement(objectIndex: 8, transform: .translate(7.5, PartyRoom.tableTop, 0.3)))
+        placements.append(Placement(objectIndex: 8, transform: .translate(9.2, PartyRoom.tableTop, -1.6) * .rotateY(40)))
+        placements += PartyRoom.bulbPlacements().map { Placement(objectIndex: 10, transform: $0) }
+        // 방 · 선물 · 풍선 · 깃발 — 재질별 오브젝트
+        for wall in PartyRoom.room(r) {
+            objects.append(wall); placements.append(Placement(objectIndex: objects.count - 1, transform: .identity))
+        }
+        let giftSizes: [SIMD3<Float>] = [[1.4, 1.0, 1.1], [1.0, 1.3, 1.0], [1.7, 0.8, 1.3]]
+        let giftPos: [SIMD3<Float>] = [[2.0, PartyRoom.tableTop, 3.2], [3.9, PartyRoom.tableTop, 3.6], [-9.5, PartyRoom.floorY, 8.5]]
+        for k in 0..<3 {
+            objects.append(PartyRoom.gift(size: giftSizes[k], box: r.gifts[k], ribbon: r.ribbon))
+            placements.append(Placement(objectIndex: objects.count - 1,
+                                        transform: .translate(giftPos[k].x, giftPos[k].y, giftPos[k].z) * .rotateY(Float(k) * 25)))
+        }
+        let balloonBase = objects.count
+        for c in r.balloons { objects.append(PartyRoom.balloon(c, string: r.wire)) }
+        placements += PartyRoom.balloonPlacements().map { Placement(objectIndex: balloonBase + $0.color, transform: $0.xf) }
+        let flagBase = objects.count
+        for c in r.flags { objects.append(PartyRoom.flag(c)) }
+        placements += PartyRoom.flagPlacements().map { Placement(objectIndex: flagBase + $0.color, transform: $0.xf) }
+        print("파티룸: 오브젝트 \(objects.count)개 · 인스턴스 \(placements.count)개")
 
-        focusCenter = [0, 0.3, 0]
-        focusRadius = 4.6
-        focusHalfHeight = 5.0
-        focusElevation = 0.04
-        minElevation = -0.3            // 샹들리에는 아래에서 올려다봐야 한다 — 바닥은 12 아래
-        environment = .studio          // 어두운 배경에 소프트박스 — 크리스털이 빛난다
-        exposure = 1.4
-        samplesPerPixel = 4            // 얇은 비즈 체인
-        maxBounces = 4                 // 유리 300개 × 6바운스는 스레드가 너무 길다
+        focusCenter = [0, -3.2, 0]
+        focusRadius = 11.0
+        focusHalfHeight = 9.5
+        focusElevation = 0.07
+        minElevation = -0.12
+        environment = .brightStudio    // 실내 — 벽이 보이려면 앰비언트가 있어야 한다
+        exposure = 1.3
+        samplesPerPixel = 4
+        maxBounces = 4
+        sunDirection = simd_normalize(SIMD3<Float>(0.25, 1.0, 0.35))
     }
 
     // MARK: - 안경 · 썬글라스 (제품 사진)

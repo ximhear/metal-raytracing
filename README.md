@@ -10,7 +10,7 @@ Bézier tube, smooth-min metaballs …) intersected in closed form inside a cust
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/chandelier.png" alt="크리스털 샹들리에"><br><sub><b>크리스털 샹들리에</b> — 깎은 크리스털 450개(팔각기둥 ∩ 타원체)를 오브젝트 둘로 인스턴싱, 황동 팔은 베지에 튜브, 촛불은 발광. 유리마다 소프트박스가 반사·굴절로 얽힌다</sub></td>
+<td width="50%"><img src="docs/images/chandelier.png" alt="파티룸의 크리스털 샹들리에"><br><sub><b>파티룸의 샹들리에</b> — 깎은 크리스털 450개(팔각기둥 ∩ 타원체)를 오브젝트 둘로 인스턴싱, 황동 팔은 베지에 튜브. 샴페인 잔·병·케이크·선물·풍선·전구 줄·깃발까지 인스턴스 700개, 오브젝트 27개</sub></td>
 <td width="50%"><img src="docs/images/ironman.png" alt="파워드 아머 — 캔디 도장·새틴 금·발광 리액터·인스턴싱된 볼트"><br><sub><b>파워드 아머</b> — 캔디 도장 · 새틴 금속 · 발광 리액터 · 패널 라인과 인스턴싱된 볼트 50개</sub></td>
 </tr>
 <tr>

@@ -250,7 +250,9 @@ indirect enum CSG {
     /// 같은 원소 목록에 `inflate` 만 줘서 몸에 딱 맞는 옷을 만드는 데 쓴다.
     ///
     /// 원소는 **로컬 원점 기준으로 다시 맞춰** 저장한다. AABB 가 원점 대칭을 가정하기 때문.
-    static func blob(_ elements: [Blob], inflate: Float = 0,
+    /// `maxSteps` — 구 추적 스텝 상한 (셰이더 기본 160). 가는 튜브는 100 이면 충분하고,
+    /// 무거운 씬에서 스레드가 너무 길어 GPU 가 스레드그룹을 죽일 때 가장 먼저 줄이는 값이다.
+    static func blob(_ elements: [Blob], inflate: Float = 0, maxSteps: Int = 0,
                      _ t: float4x4 = .identity, material: Int) -> CSG {
         precondition(!elements.isEmpty && elements.count <= 48,
                      "BLOB 원소는 1~48개 (셰이더의 BLOB_MAX_ELEMS) — 지금 \(elements.count)개")
@@ -267,7 +269,7 @@ indirect enum CSG {
 
         var data: [SIMD4<Float>] = [
             SIMD4<Float>(half.x, half.y, half.z, simd_length(half) + 0.01),
-            SIMD4<Float>(Float(elements.count), inflate, 0, 0),
+            SIMD4<Float>(Float(elements.count), inflate, Float(maxSteps), 0),
         ]
         for e in elements {
             let a = e.p0 - mid

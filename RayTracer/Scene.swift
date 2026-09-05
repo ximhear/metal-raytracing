@@ -31,6 +31,8 @@ final class CSGScene {
         case ironMan
         /// 크리스털 샹들리에
         case chandelier
+        /// 1960년대 영국 로드스터
+        case sportsCar
         /// 얇은 금테 안경 — 제품 사진 구도
         case glasses
         /// 굵은 테 썬글라스 — 제품 사진 구도
@@ -52,6 +54,7 @@ final class CSGScene {
             case .face:         return "여성 얼굴"
             case .ironMan:      return "아이언맨"
             case .chandelier:   return "파티룸의 샹들리에"
+            case .sportsCar:    return "클래식 스포츠카"
             case .glasses:      return "안경"
             case .sunglasses:   return "썬글라스"
             case .showcase:     return "부품 전시장"
@@ -77,6 +80,8 @@ final class CSGScene {
                 return "붉은 캔디 도장 · 금색 거울 · 발광 눈과 아크 리액터 — 갑옷 판 60여 장"
             case .chandelier:
                 return "크리스털 450개 · 샴페인 잔 · 케이크 · 풍선 · 전구 줄 · 깃발 — 인스턴스 700개"
+            case .sportsCar:
+                return "타원체 11개를 섞어 잘라 낸 차체 · 캔디 도장 · 와이어 휠 스포크 192개 인스턴싱"
             case .glasses:
                 return "라운드 검은 림 + 로즈골드 다리 · 베지에 튜브 · 굴절률 1.5 유리 렌즈"
             case .sunglasses:
@@ -98,6 +103,7 @@ final class CSGScene {
             case .face:         return "face.smiling"
             case .ironMan:      return "bolt.shield.fill"
             case .chandelier:   return "sparkles"
+            case .sportsCar:    return "car.fill"
             case .glasses:      return "eyeglasses"
             case .sunglasses:   return "sunglasses"
             case .showcase:     return "cube.transparent"
@@ -151,6 +157,7 @@ final class CSGScene {
         case .face:     buildFace(eyewear: nil)
         case .ironMan:    buildIronMan()
         case .chandelier: buildChandelier()
+        case .sportsCar:  buildSportsCar()
         case .glasses:    buildSpectacles()
         case .sunglasses: buildSquareSunglasses()
         case .showcase: buildShowcase()
@@ -558,6 +565,51 @@ final class CSGScene {
         samplesPerPixel = 4
         maxBounces = 4
         sunDirection = simd_normalize(SIMD3<Float>(0.25, 1.0, 0.35))
+    }
+
+    // MARK: - 클래식 스포츠카
+
+    private func buildSportsCar() {
+        let m = SportsCar.Materials(
+            paint:   addMaterial([0.62, 0.03, 0.03], gloss: 0.98),                    // 캔디 레드
+            chrome:  addMaterial([0.95, 0.96, 0.97], type: MATERIAL_METAL),
+            glass:   addMaterial([0.90, 0.94, 0.95], type: MATERIAL_GLASS, ior: 1.50),
+            rubber:  addMaterial([0.035, 0.035, 0.037], gloss: 0.25, grain: 0.2),
+            black:   addMaterial([0.05, 0.05, 0.05], gloss: 0.35),
+            leather: addMaterial([0.58, 0.40, 0.26], gloss: 0.35, grain: 0.15),          // 탄 가죽
+            lamp:    addMaterial([0.92, 0.93, 0.90], gloss: 0.9),
+            amber:   addMaterial([0.95, 0.55, 0.08], gloss: 0.9),
+            red:     addMaterial([0.70, 0.05, 0.05], gloss: 0.9))
+        let floor = addMaterial([0.06, 0.06, 0.065], gloss: 0.55, grain: 0.15)          // 전시장 검은 대리석
+
+        objects = [
+            CSG.box(.scale(200, 0.2, 200), material: floor),   // 0
+            SportsCar.body(m),                                 // 1
+            SportsCar.brightwork(m),                           // 2
+            SportsCar.glassParts(m),                           // 3
+            SportsCar.interior(m),                             // 4
+            SportsCar.wheel(m),                                // 5 ×4
+            SportsCar.spoke(m),                                // 6 ×192
+            SportsCar.underbody(m),                            // 7
+        ]
+        placements = [Placement(objectIndex: 0, transform: .translate(0, -0.2, 0)),
+                      Placement(objectIndex: 7, transform: .identity)]
+        placements += (1...4).map { Placement(objectIndex: $0, transform: .identity) }
+        for w in SportsCar.wheelPlacements() {
+            placements.append(Placement(objectIndex: 5, transform: w))
+            placements += SportsCar.spokeLocal().map { Placement(objectIndex: 6, transform: w * $0) }
+        }
+        print("스포츠카: 오브젝트 \(objects.count)개 · 인스턴스 \(placements.count)개")
+
+        focusCenter = [0, 4.4, 0]
+        focusRadius = 21.5
+        focusHalfHeight = 6.5
+        focusElevation = 0.12
+        minElevation = 0.03
+        environment = .brightStudio    // 캔디 도장은 비칠 것이 있어야 산다
+        exposure = 1.3
+        samplesPerPixel = 4
+        maxBounces = 4
     }
 
     // MARK: - 안경 · 썬글라스 (제품 사진)

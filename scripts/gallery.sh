@@ -24,3 +24,4 @@ render glasses glasses 1200 750 0.0
 render sunglasses sunglasses 1200 750 0.0
 render showcase showcase 1200 750 0.0
 render chandelier chandelier 1200 780 0.3
+render sportscar sportsCar 1200 750 0.55

@@ -14,16 +14,20 @@ Bézier tube, smooth-min metaballs …) intersected in closed form inside a cust
 <td width="50%"><img src="docs/images/ironman.png" alt="파워드 아머 — 캔디 도장·새틴 금·발광 리액터·인스턴싱된 볼트"><br><sub><b>파워드 아머</b> — 캔디 도장 · 새틴 금속 · 발광 리액터 · 패널 라인과 인스턴싱된 볼트 50개</sub></td>
 </tr>
 <tr>
+<td><img src="docs/images/sportscar.png" alt="클래식 스포츠카"><br><sub><b>클래식 스포츠카</b> — 타원체 11개를 smooth-min 으로 섞은 차체를 바닥 평면·휠 아치·콕핏·그릴 입으로 잘라 낸 것. 캔디 도장, 크롬, 유리 덮개 헤드라이트, 와이어 휠 스포크 192개 인스턴싱</sub></td>
 <td><img src="docs/images/turbofan.png" alt="터보팬 제트엔진 커터웨이"><br><sub><b>터보팬 제트엔진 커터웨이</b> — 블레이드 1,500장을 오브젝트 40개로 인스턴싱, 사분면 하나를 빼서 카울을 걷어낸 단면(절단면 색은 공짜)</sub></td>
+</tr>
+<tr>
 <td><img src="docs/images/watch.png" alt="기계식 시계 무브먼트"><br><sub><b>기계식 시계 무브먼트</b> — 기어 트레인 · 탈진기 · 헤어스프링 · 루비 보석. 전부 불리언 가공물, 스튜디오 소프트박스가 금속에 비친다</sub></td>
-</tr>
-<tr>
 <td><img src="docs/images/bus.png" alt="현대 슈퍼 에어로시티 시내버스"><br><sub><b>시내버스</b> — 민코프스키 둥근 상자 차체 · 실내와 좌석 · 유리 · 부품 62개</sub></td>
-<td><img src="docs/images/bus-glass.png" alt="유리 버스"><br><sub><b>유리 버스</b> — 같은 형상을 굴절·프레넬만으로. 재질 매핑만 바뀐다</sub></td>
 </tr>
 <tr>
+<td><img src="docs/images/bus-glass.png" alt="유리 버스"><br><sub><b>유리 버스</b> — 같은 형상을 굴절·프레넬만으로. 재질 매핑만 바뀐다</sub></td>
 <td><img src="docs/images/face.png" alt="양식화 여성 흉상"><br><sub><b>인물 흉상</b> — smooth-min 거리장(메타볼 + 베지에 튜브)으로 조각, 피부 표면하 산란, 비등방 머리카락</sub></td>
+</tr>
+<tr>
 <td><img src="docs/images/ironman-close.png" alt="아머 클로즈업"><br><sub><b>아머 클로즈업</b> — 음각 패널, 홈, 육각 볼트, 새틴 금속의 착색 프레넬</sub></td>
+<td><img src="docs/images/turbofan-front.png" alt="터보팬 정면 — 팬 블레이드"><br><sub><b>터보팬 정면</b> — 와이드 코드 팬 블레이드 22장, 스윕과 비틀림은 둥근 상자 조각을 겹쳐 쌓은 것</sub></td>
 </tr>
 <tr>
 <td><img src="docs/images/glasses.png" alt="라운드 금테 안경"><br><sub><b>안경</b> — 흰 사이클로라마 · 면광원 소프트 섀도 · 4 spp · 굴절률 1.5 렌즈</sub></td>
@@ -31,7 +35,7 @@ Bézier tube, smooth-min metaballs …) intersected in closed form inside a cust
 </tr>
 <tr>
 <td><img src="docs/images/showcase.png" alt="부품 전시장"><br><sub><b>부품 전시장</b> — 해석적 부품 16종 + 불리언 조립 · 거울과 유리</sub></td>
-<td><img src="docs/images/turbofan-front.png" alt="터보팬 정면 — 팬 블레이드"><br><sub><b>터보팬 정면</b> — 와이드 코드 팬 블레이드 22장, 스윕과 비틀림은 둥근 상자 조각을 겹쳐 쌓은 것</sub></td>
+<td></td>
 </tr>
 </table>
 

@@ -23,8 +23,11 @@ Metal Ray Tracing API 위에 올린 **해석적 CSG 레이 트레이서**. 메�
   `CSG_MAX_INTERVALS`/`CSG_MAX_STACK` 을 키우거나 `Interval`/`Hit` 을 `float3` 로 되돌리면
   `Compute pipeline exceeds available stack space` 로 실기기에서만 실패한다 — **M 시리즈 Mac 에서는 재현되지 않는다.**
 - `CSG.unionAll` 은 **왼쪽 체인**으로 묶는다 (스택 깊이 2 고정). 균형 트리가 더 낫다고 바꾸지 말 것 — 후위 표기 평가에서는 반대다.
-- 씬은 `CSGScene(.bus)` / `.showcase` 두 개다 (`Renderer.init` 에서 고름).
-  **이 저장소는 git 이 아니다** — 씬이나 모델 코드를 지우면 되돌릴 수 없으니, 지우는 대신 Kind 를 늘린다.
+- 씬은 `CSGScene.Kind` 로 고른다 (버스 3종 · 시계 · 터보팬 · 얼굴 · 아이언맨 · 안경 · 썬글라스 · 전시장 · 검증).
+  **씬을 추가하려면 `Kind` 에 case 하나** — 메뉴가 따라 생긴다. 기존 씬은 지우지 말고 Kind 를 늘린다.
+- 공개 저장소다: https://github.com/ximhear/metal-raytracing — `main` 에 바로 커밋한다.
+  README 대문의 갤러리 이미지는 `make gallery` 가 `docs/images/` 에 다시 뽑는다 (씬 구도를 바꿨으면 다시 뽑을 것).
+  `Local.xcconfig`(서명 팀) · `build/` · `out/` · `RayTracer.xcodeproj` 는 gitignore 되어 있다.
 - 씬을 만들 때 `Bus.interiorViolations` / `floatingViolations` 가 돌면서 부품이 둥근 차체를
   뚫고 나가거나 허공에 뜨는지 검사한다. **콘솔에 `⚠️ Bus:` 가 찍히면 무시하지 말 것** —
   이 종류는 특정 각도에서만 보여서 눈으로는 놓친다.

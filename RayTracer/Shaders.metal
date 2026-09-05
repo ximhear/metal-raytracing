@@ -1079,6 +1079,14 @@ static float3 brightStudioEnv(float3 dir) {
     c += softbox(dir, normalize(float3(-0.90f, 0.35f,  0.30f)), 0.40f, 0.15f) * float3(2.2f, 2.2f, 2.4f);
     c += softbox(dir, normalize(float3( 0.85f, 0.30f, -0.40f)), 0.35f, 0.12f) * float3(1.8f, 1.9f, 2.2f);
     c += softbox(dir, normalize(float3( 0.00f, 0.20f,  1.00f)), 0.55f, 0.25f) * float3(1.2f, 1.2f, 1.25f); // 카메라 쪽 필
+    // 자동차 스튜디오의 **수평 라이트 바** — 환경을 한 바퀴 도는 긴 띠. 도장 옆구리에 또렷한
+    // 반사선이 흐르게 하는 것이 이것이다. 원형 소프트박스만으로는 반사가 점점이 흩어진다.
+    float bar = 1.0f - smoothstep(0.035f, 0.075f, fabs(dir.y - 0.36f));
+    c += bar * float3(1.9f, 1.9f, 1.85f);
+    float bar2 = 1.0f - smoothstep(0.02f, 0.05f, fabs(dir.y - 0.62f));
+    c += bar2 * float3(0.9f);
+    // 지평선 바로 위는 살짝 어둡게 — 바닥과 배경의 경계가 반사에서 선으로 읽힌다
+    c *= mix(0.55f, 1.0f, smoothstep(-0.02f, 0.10f, dir.y)) * mix(1.0f, 0.75f, smoothstep(-0.3f, -0.02f, dir.y) * (dir.y < 0.0f));
     return c;
 }
 
@@ -1217,7 +1225,10 @@ static float shadowRay(float3 pos, float3 n, float3 lightDir,
 
 /// 확산 + 반구 앰비언트 + 클리어코트 하이라이트.
 /// `viewDir` 는 표면을 향해 들어오는 레이 방향.
+/// `shadowSoft` — 이 히트에서 쓸 광원 각반지름. **첫 히트에서만 부드럽게**, 반사·굴절 너머의
+/// 히트는 0(레이 하나). 모든 바운스에 8개씩 쏘면 크롬·유리 사슬에서 스레드가 죽는다 (스포츠카가 그랬다).
 static float3 shadeSurface(SurfaceHit h, float3 viewDir, constant Uniforms& u,
+                           float shadowSoft,
                            instance_acceleration_structure accel,
                            intersection_function_table<instancing> funcTable,
                            constant Material* materials)
@@ -1240,7 +1251,7 @@ static float3 shadeSurface(SurfaceHit h, float3 viewDir, constant Uniforms& u,
     }
 
     float rawNdL = dot(h.n, u.lightDir);
-    float shadow = shadowFactor(h.pos, h.n, u.lightDir, u.shadowSoftness, accel, funcTable, materials);
+    float shadow = shadowFactor(h.pos, h.n, u.lightDir, shadowSoft, accel, funcTable, materials);
     float ndotl = max(rawNdL, 0.0f);
 
     // 빛을 등진 면은 **반드시** 자기 자신에 가려지므로 그림자 레이가 0 을 돌려준다.
@@ -1341,7 +1352,7 @@ static float3 shadeReflectionOnce(ray r, constant Uniforms& u,
     constant Material& mat = materials[h.material];
     if (mat.type == MATERIAL_EMISSIVE) return mat.color;
     if (mat.type == MATERIAL_DIFFUSE || mat.type == MATERIAL_HAIR || mat.type == MATERIAL_SATIN) {
-        return shadeSurface(h, r.direction, u, accel, funcTable, materials);
+        return shadeSurface(h, r.direction, u, 0.0f, accel, funcTable, materials);
     }
     // 거울/유리에 또 부딪히면 하늘색으로 근사 (깊은 재귀 방지)
     float3 refl = reflect(r.direction, h.n);
@@ -1383,7 +1394,8 @@ static float3 shadePixel(float2 uv, constant Uniforms& u,
         if (mat.type == MATERIAL_DIFFUSE || mat.type == MATERIAL_HAIR) {
             // 광택 재질은 여기서 끝내지 않고 **환경 반사 한 번을 더 쏜다.**
             // 도장면이 하늘과 노면을 비추는 이 성분이 "실물처럼 보이는" 핵심이다.
-            float3 direct = shadeSurface(h, r.direction, u, accel, funcTable, materials);
+            float3 direct = shadeSurface(h, r.direction, u, bounce == 0 ? u.shadowSoftness : 0.0f,
+                                         accel, funcTable, materials);
             float cosV = clamp(-dot(r.direction, h.n), 0.0f, 1.0f);
             float F = coatFresnel(cosV, mat.gloss);
             result += throughput * (1.0f - F) * direct;
@@ -1413,7 +1425,8 @@ static float3 shadePixel(float2 uv, constant Uniforms& u,
             float3 F0 = mat.color * 0.70f;
             float3 F = F0 + (float3(1.0f) - F0) * x5;
             // 금속은 확산이 거의 없다 — 바탕은 반만 남기고 나머지는 반사가 맡는다
-            float3 direct = shadeSurface(h, r.direction, u, accel, funcTable, materials);
+            float3 direct = shadeSurface(h, r.direction, u, bounce == 0 ? u.shadowSoftness : 0.0f,
+                                         accel, funcTable, materials);
             result += throughput * (float3(1.0f) - F) * direct * 0.5f;
             if (bounce + 1 < maxB) {
                 throughput *= F;

@@ -25,8 +25,8 @@ enum SportsCar {
 
     // MARK: - 차체
 
-    static func bodyBlob(_ mat: Int, inflate: Float = 0) -> CSG {
-        CSG.blob([
+    /// 차체 원소 — blob 과 CPU 표면 계산(`surfaceY`)이 같은 목록을 쓴다
+    static let bodyElements: [B] = [
             B.ell([ 19.8, 4.9, 0], [3.4, 1.9, 4.9], blend: 2.0),                 // 코 — 낮고 뾰족하게
             B.ell([ 12.0, 5.4, 0], [10.5, 2.5, 7.0], blend: 2.4),                // 보닛 — 앞으로 갈수록 낮게
             B.ell([  3.0, 5.7, 0], [6.5, 2.7, 7.9], blend: 2.4),                 // 카울
@@ -38,7 +38,48 @@ enum SportsCar {
             B.ell([ axleX, 5.4, -6.0], [5.6, 3.2, 2.3], blend: 1.6),
             B.ell([-axleX, 5.4,  6.0], [6.0, 3.2, 2.3], blend: 1.6),             // 뒤 펜더
             B.ell([-axleX, 5.4, -6.0], [6.0, 3.2, 2.3], blend: 1.6),
-        ], inflate: inflate, material: mat)
+    ]
+
+    static func bodyBlob(_ mat: Int, inflate: Float = 0) -> CSG {
+        CSG.blob(bodyElements, inflate: inflate, material: mat)
+    }
+
+    /// 셰이더와 같은 식으로 차체 SDF 를 CPU 에서 평가한다 — 루버·와이퍼를 **표면 위에 정확히** 얹기 위해.
+    /// 감으로 y 를 넣으면 곡면이라 반은 묻히고 반은 뜬다.
+    static func bodySDF(_ p: SIMD3<Float>) -> Float {
+        func ell(_ q: SIMD3<Float>, _ r: SIMD3<Float>) -> Float {
+            let k0 = simd_length(q / r), k1 = simd_length(q / (r * r))
+            return k0 * (k0 - 1) / max(k1, 1e-8)
+        }
+        func smin(_ a: Float, _ b: Float, _ k: Float) -> Float {
+            let h = min(max(0.5 + 0.5 * (b - a) / max(k, 1e-5), 0), 1)
+            return b + (a - b) * h - k * h * (1 - h)
+        }
+        var d: Float = 1e9
+        for e in bodyElements { d = smin(d, ell(p - e.p0, e.r0), e.blend) }
+        return d
+    }
+
+    /// (x, z) 위 차체 윗면의 y — 위에서 내려오며 처음 만나는 면을 이분법으로
+    static func surfaceY(_ x: Float, _ z: Float) -> Float {
+        var lo: Float = 2.5, hi: Float = 12
+        var y = hi
+        while y > lo && bodySDF([x, y, z]) > 0 { y -= 0.1 }      // 대충 찾고
+        hi = y + 0.1; lo = y
+        for _ in 0..<20 {                                         // 조인다
+            let mid = (lo + hi) / 2
+            if bodySDF([x, mid, z]) > 0 { hi = mid } else { lo = mid }
+        }
+        return (lo + hi) / 2
+    }
+
+    /// 표면 법선 (차분)
+    static func surfaceNormal(_ p: SIMD3<Float>) -> SIMD3<Float> {
+        let h: Float = 0.02
+        return simd_normalize(SIMD3<Float>(
+            bodySDF(p + [h, 0, 0]) - bodySDF(p - [h, 0, 0]),
+            bodySDF(p + [0, h, 0]) - bodySDF(p - [0, h, 0]),
+            bodySDF(p + [0, 0, h]) - bodySDF(p - [0, 0, h])))
     }
 
     static func body(_ m: Materials) -> CSG {
@@ -130,6 +171,54 @@ enum SportsCar {
         return CSG.unionAll(parts)
     }
 
+    // MARK: - 루버 · 와이퍼 · 번호판
+
+    /// 보닛 루버 하나 — 눌러 올린 얇은 살(도장색) 뒤에 검은 틈. 로컬: 표면 원점, +y 가 법선, 살은 x 방향으로 눕는다
+    static func louvre(_ m: Materials) -> CSG {
+        CSG.roundBox(half: [0.10, 0.045, 0.80], radius: 0.03, .translate(-0.03, 0.03, 0) * .rotateZ(-25), material: m.paint)
+      | CSG.roundBox(half: [0.07, 0.12, 0.72], radius: 0.02, .translate(0.08, -0.06, 0), material: m.black)
+    }
+
+    /// 루버 배치 — 보닛 벌지 양옆에 13개씩, 표면 높이와 법선을 SDF 로 잰다
+    static func louvrePlacements() -> [float4x4] {
+        var out: [float4x4] = []
+        for s: Float in [1, -1] {
+            for i in 0..<13 {
+                let x: Float = 3.6 + Float(i) * 0.5
+                let z: Float = 3.9 * s
+                let y = surfaceY(x, z)
+                let n = surfaceNormal([x, y, z])
+                out.append(.translate(x, y, z) * IronMan.alignY(n))
+            }
+        }
+        return out
+    }
+
+    /// 와이퍼 둘 — 카울 위, 윈드스크린 밑에 눕혀 놓는다. 암(크롬 검정) + 고무 날
+    static func wipers(_ m: Materials) -> CSG {
+        var parts: [CSG] = []
+        for (z0, dir) in [(-4.6, 1.0), (0.6, 1.0)] as [(Float, Float)] {
+            let x: Float = 2.1
+            let y = surfaceY(x, z0) + 0.12
+            let arm = float4x4.translate(x, y, z0) * .rotateY(-8 * dir)
+            parts.append(CSG.roundBox(half: [0.07, 0.06, 1.9], radius: 0.03, arm * .translate(0, 0.08, 1.9), material: m.black))
+            parts.append(CSG.roundBox(half: [0.05, 0.10, 1.75], radius: 0.02, arm * .translate(0.12, 0.02, 2.0), material: m.rubber))
+            parts.append(CSG.cylinder(.translate(x, y - 0.05, z0) * .scale(0.16, 0.14, 0.16), material: m.chrome))  // 피벗
+        }
+        return CSG.unionAll(parts)
+    }
+
+    /// 번호판 — 앞은 범퍼 아래 브래킷, 뒤는 오버라이더 사이. 1960년대 영국식 흰 글자/검은 판은
+    /// 글자를 못 새기니 노란 판에 검은 테두리로 "판" 으로만 읽히게 한다
+    static func plates(_ m: Materials, plate: Int) -> CSG {
+        let rear = CSG.roundBox(half: [0.06, 0.62, 2.35], radius: 0.04, .translate(-23.05, 5.65, 0) * .rotateZ(6), material: plate)
+                 | CSG.roundBox(half: [0.04, 0.50, 2.20], radius: 0.03, .translate(-23.12, 5.65, 0) * .rotateZ(6), material: m.black)
+        let front = CSG.roundBox(half: [0.06, 0.60, 2.35], radius: 0.04, .translate(22.85, 3.15, 0) * .rotateZ(-8), material: plate)
+                  | CSG.roundBox(half: [0.04, 0.48, 2.20], radius: 0.03, .translate(22.92, 3.15, 0) * .rotateZ(-8), material: m.black)
+                  | CSG.roundBox(half: [0.5, 0.12, 0.3], radius: 0.05, .translate(22.3, 3.75, 0), material: m.black)   // 브래킷
+        return rear | front
+    }
+
     static func glassParts(_ m: Materials) -> CSG {
         let ws = CSG.roundBox(half: [0.06, 1.9, 5.65], radius: 0.05,
                               .translate(0.15, 10.35, 0) * .rotateZ(40), material: m.glass)
@@ -166,7 +255,14 @@ enum SportsCar {
 
     /// 로컬: 축 = z, 바깥면 = +z
     static func wheel(_ m: Materials) -> CSG {
-        let tire = CSG.torus(.rotateX(90) * .scale(2.55, 2.55, 2.55) * .scale(1, 0.92, 1), material: m.rubber)
+        // 타이어 — 토러스에서 얇은 토러스 셋을 빼 원주 방향 트레드 홈, 옆면에 가는 화이트월 띠
+        var tire = CSG.torus(.rotateX(90) * .scale(2.55, 2.55, 2.55) * .scale(1, 0.92, 1), material: m.rubber)
+        for dz in [-0.45, 0.0, 0.45] as [Float] {
+            tire = tire - CSG.torus(.translate(0, 0, dz) * .rotateX(90) * .scale(3.35, 3.35, 3.35) * .scale(1, 0.03, 1)
+                                    * .scale(1, 1, 1), material: m.black)
+        }
+        let whitewall = CSG.cylinder(.translate(0, 0, 0.95) * .rotateX(90) * .scale(2.35, 0.02, 2.35), material: m.lamp)
+                      - CSG.cylinder(.translate(0, 0, 0.95) * .rotateX(90) * .scale(2.10, 0.1, 2.10), material: m.lamp)
         let rim = CSG.cylinder(.rotateX(90) * .scale(1.95, 0.85, 1.95), material: m.chrome)
                 - CSG.cylinder(.rotateX(90) * .scale(1.72, 1.2, 1.72), material: m.chrome)
         let hub = CSG.lathe([(-0.6, 0.55), (0.2, 0.62), (0.6, 0.45), (0.9, 0.35), (1.15, 0.12)],
@@ -177,7 +273,7 @@ enum SportsCar {
             ears.append(CSG.roundBox(half: [0.55, 0.14, 0.16], radius: 0.08,
                                      .translate(0, 0, 1.0) * .rotateZ(Float(k) * 120) * .translate(0.35, 0, 0), material: m.chrome))
         }
-        return CSG.unionAll([tire, rim, hub] + ears)
+        return CSG.unionAll([tire, whitewall, rim, hub] + ears)
     }
 
     static func spoke(_ m: Materials) -> CSG {

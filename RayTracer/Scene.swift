@@ -581,6 +581,7 @@ final class CSGScene {
             amber:   addMaterial([0.95, 0.55, 0.08], gloss: 0.9),
             red:     addMaterial([0.70, 0.05, 0.05], gloss: 0.9))
         let floor = addMaterial([0.06, 0.06, 0.065], gloss: 0.55, grain: 0.15)          // 전시장 검은 대리석
+        let plate = addMaterial([0.93, 0.82, 0.18], gloss: 0.4)                         // 번호판
 
         objects = [
             CSG.box(.scale(200, 0.2, 200), material: floor),   // 0
@@ -591,10 +592,16 @@ final class CSGScene {
             SportsCar.wheel(m),                                // 5 ×4
             SportsCar.spoke(m),                                // 6 ×192
             SportsCar.underbody(m),                            // 7
+            SportsCar.louvre(m),                               // 8 ×26
+            SportsCar.wipers(m),                               // 9
+            SportsCar.plates(m, plate: plate),                 // 10
         ]
         placements = [Placement(objectIndex: 0, transform: .translate(0, -0.2, 0)),
-                      Placement(objectIndex: 7, transform: .identity)]
+                      Placement(objectIndex: 7, transform: .identity),
+                      Placement(objectIndex: 9, transform: .identity),
+                      Placement(objectIndex: 10, transform: .identity)]
         placements += (1...4).map { Placement(objectIndex: $0, transform: .identity) }
+        placements += SportsCar.louvrePlacements().map { Placement(objectIndex: 8, transform: $0) }
         for w in SportsCar.wheelPlacements() {
             placements.append(Placement(objectIndex: 5, transform: w))
             placements += SportsCar.spokeLocal().map { Placement(objectIndex: 6, transform: w * $0) }
@@ -606,10 +613,12 @@ final class CSGScene {
         focusHalfHeight = 6.5
         focusElevation = 0.12
         minElevation = 0.03
-        environment = .brightStudio    // 캔디 도장은 비칠 것이 있어야 산다
-        exposure = 1.3
+        environment = .brightStudio    // 캔디 도장은 비칠 것이 있어야 산다 — 수평 라이트 바가 옆구리에 흐른다
+        exposure = 1.25
         samplesPerPixel = 4
         maxBounces = 4
+        shadowSoftness = 0.05          // 면광원 — 바닥의 접지 그림자가 부드러워야 차가 놓인 것으로 읽힌다
+        sunDirection = simd_normalize(SIMD3<Float>(0.3, 0.9, 0.55))
     }
 
     // MARK: - 안경 · 썬글라스 (제품 사진)

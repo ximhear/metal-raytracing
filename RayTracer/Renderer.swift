@@ -115,6 +115,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
     private var shadowSoftness: Float = 0
     private var samplesPerPixel: Int = 1
     private var exposure: Float = 1.25
+    private var maxBounces: Int = 6
     private var focusRadius: Float = 5.4
     private var focusHalfHeight: Float = 2.5
 
@@ -157,6 +158,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         shadowSoftness = scene.shadowSoftness
         samplesPerPixel = scene.samplesPerPixel
         exposure = scene.exposure
+        maxBounces = scene.maxBounces
         focusHalfHeight = scene.focusHalfHeight
         camera.elevation = scene.focusElevation
         minElevation = scene.minElevation
@@ -339,15 +341,56 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         u.shadowSoftness = interacting ? 0 : shadowSoftness
         u.spp = UInt32(interacting ? 1 : samplesPerPixel)
         u.exposure = exposure
+        u.maxBounces = UInt32(maxBounces)
         return u
     }
 
     // MARK: - Rendering
 
     /// 커널 한 번 디스패치. drawable 이든 오프스크린 텍스처든 동일한 경로를 쓴다.
-    private func encode(into cmd: MTLCommandBuffer, texture tex: MTLTexture, time: Float? = nil) {
+    /// 한 띠의 행 수. 무거운 씬에서도 띠 하나가 워치독(수백 ms) 안에 끝나야 한다.
+    private let bandRows = 128
+
+    /// 샘플 누적 버퍼 (float4 × 픽셀). 슈퍼샘플링 패스가 여기에 더한다. 크기가 모자라면 다시 만든다.
+    private var accumBuffer: MTLBuffer?
+    private func accumulator(pixels: Int) -> MTLBuffer? {
+        let bytes = pixels * MemoryLayout<SIMD4<Float>>.stride
+        if let b = accumBuffer, b.length >= bytes { return b }
+        accumBuffer = device.makeBuffer(length: bytes, options: .storageModePrivate)
+        return accumBuffer
+    }
+
+    /// 텍스처 전체를 **샘플 패스 × 가로 띠**로 나눠 각각 별도 커맨드 버퍼로 그린다.
+    /// 스레드 하나는 한 샘플만 계산한다 — 커널 안에서 4샘플을 돌면 GPU 가 스레드그룹을 소리 없이 죽인다.
+    /// `each` 는 커밋 직전에 (버퍼, 마지막인가) 로 불린다 — present·완료 핸들러는 여기서 건다.
+    @discardableResult
+    private func encodeBanded(texture tex: MTLTexture, time: Float? = nil,
+                              each: ((MTLCommandBuffer, Bool) -> Void)? = nil) -> MTLCommandBuffer? {
+        let samples = interacting ? 1 : max(1, samplesPerPixel)
+        guard let acc = accumulator(pixels: tex.width * tex.height) else { return nil }
+        var lastCmd: MTLCommandBuffer?
+        for sample in 0..<samples {
+            var row = 0
+            while row < tex.height {
+                guard let cmd = queue.makeCommandBuffer() else { return lastCmd }
+                let rows = min(bandRows, tex.height - row)
+                encode(into: cmd, texture: tex, accum: acc, time: time,
+                       rowOffset: row, rows: rows, sampleIndex: sample)
+                row += rows
+                each?(cmd, sample == samples - 1 && row >= tex.height)
+                cmd.commit()
+                lastCmd = cmd
+            }
+        }
+        return lastCmd
+    }
+
+    private func encode(into cmd: MTLCommandBuffer, texture tex: MTLTexture, accum: MTLBuffer,
+                        time: Float? = nil, rowOffset: Int = 0, rows: Int? = nil, sampleIndex: Int = 0) {
         guard let enc = cmd.makeComputeCommandEncoder() else { return }
         var u = makeUniforms(width: tex.width, height: tex.height, time: time)
+        u.rowOffset = UInt32(rowOffset)
+        u.sampleIndex = UInt32(sampleIndex)
 
         enc.setComputePipelineState(pipeline)
         enc.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
@@ -355,6 +398,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         enc.setIntersectionFunctionTable(functionTable, bufferIndex: 2)
         enc.setBuffer(instanceDataBuffer, offset: 0, index: 3)
         enc.setBuffer(materialBuffer, offset: 0, index: 4)
+        enc.setBuffer(accum, offset: 0, index: 5)
         enc.setTexture(tex, index: 0)
 
         // 인스턴스 가속 구조가 참조하는 하위 구조 + function table이 쓰는 버퍼는 useResource 필수
@@ -363,7 +407,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
 
         let w = pipeline.threadExecutionWidth
         let h = pipeline.maxTotalThreadsPerThreadgroup / w
-        enc.dispatchThreads(MTLSize(width: tex.width, height: tex.height, depth: 1),
+        enc.dispatchThreads(MTLSize(width: tex.width, height: rows ?? tex.height, depth: 1),
                             threadsPerThreadgroup: MTLSize(width: w, height: h, depth: 1))
         enc.endEncoding()
     }
@@ -380,13 +424,14 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
                                                             width: width, height: height, mipmapped: false)
         desc.usage = [.shaderWrite, .shaderRead]
         desc.storageMode = .shared
-        guard let tex = device.makeTexture(descriptor: desc),
-              let cmd = queue.makeCommandBuffer()
-        else { return nil }
+        guard let tex = device.makeTexture(descriptor: desc) else { return nil }
 
-        encode(into: cmd, texture: tex, time: time)
-        cmd.commit()
+        guard let cmd = encodeBanded(texture: tex, time: time) else { return nil }
         cmd.waitUntilCompleted()
+        if let error = cmd.error {
+            // GPU 가 중간에 죽으면(타임아웃·폴트) 텍스처의 남은 타일이 쓰레기로 남는다 — 조용히 넘기지 않는다
+            FileHandle.standardError.write("⚠️ GPU 커맨드 실패: \(error.localizedDescription) (status \(cmd.status.rawValue))\n".data(using: .utf8)!)
+        }
 
         let bytesPerRow = width * 4
         var pixels = [UInt8](repeating: 0, count: bytesPerRow * height)
@@ -430,28 +475,28 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
             publishHUD("currentDrawable == nil")
             return
         }
-        guard let cmd = queue.makeCommandBuffer() else {
-            publishHUD("commandBuffer 생성 실패")
-            return
-        }
-
         let tex = drawable.texture
         lastDrawableSize = (tex.width, tex.height)
-        encode(into: cmd, texture: tex)
-        cmd.addCompletedHandler { [weak self] buffer in
-            guard let self else { return }
-            if let error = buffer.error {
-                self.publishHUD("GPU 에러: \(error.localizedDescription)")
-                return
+        // 띠마다 커맨드 버퍼 하나 — 무거운 씬이 워치독에 걸리지 않는다. 마지막 띠가 present 한다.
+        final class Acc { var ms = 0.0 }
+        let acc = Acc()
+        encodeBanded(texture: tex) { [weak self] cmd, isLast in
+            cmd.addCompletedHandler { buffer in
+                guard let self else { return }
+                if let error = buffer.error {
+                    self.publishHUD("GPU 에러: \(error.localizedDescription)")
+                    return
+                }
+                acc.ms += (buffer.gpuEndTime - buffer.gpuStartTime) * 1000
+                guard isLast else { return }
+                // 요청 시에만 그리므로 fps 는 의미가 없다 — GPU 프레임 시간(띠 합)을 보여 준다
+                self.lastGPUms = acc.ms
+                self.publishHUD(String(format: "%dx%d  %.1f ms  %@  |  %@",
+                                       tex.width, tex.height, self.lastGPUms,
+                                       self.device.name, self.cameraSummary))
             }
-            // 요청 시에만 그리므로 fps 는 의미가 없다 — GPU 프레임 시간을 보여 준다
-            self.lastGPUms = (buffer.gpuEndTime - buffer.gpuStartTime) * 1000
-            self.publishHUD(String(format: "%dx%d  %.1f ms  %@  |  %@",
-                                   tex.width, tex.height, self.lastGPUms,
-                                   self.device.name, self.cameraSummary))
+            if isLast { cmd.present(drawable) }
         }
-        cmd.present(drawable)
-        cmd.commit()
     }
 
     private func publishHUD(_ text: String) {

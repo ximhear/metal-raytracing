@@ -167,9 +167,19 @@ typedef struct {
     /// 그림자 레이를 8개 쏘므로 8배 비싸다 — 작은 제품 씬에서만.
     float         shadowSoftness;
     /// 픽셀당 샘플 수 (1 또는 4). 가는 철사 테처럼 픽셀보다 얇은 것은 4 가 아니면 계단이 된다.
+    /// **샘플은 커널 안 루프가 아니라 패스로 나눈다** — 스레드 하나가 4샘플 × 유리 6바운스 ×
+    /// 베지에 구 추적을 다 하면 GPU 가 스레드그룹을 소리 없이 죽여 흰 타일이 남는다 (샹들리에가 그랬다).
     unsigned int  spp;
+    /// 이 패스가 계산하는 샘플 번호 (0 ..< spp). 누적 버퍼에 더하고, 마지막 패스가 평균·톤매핑한다.
+    unsigned int  sampleIndex;
     /// 노출 배율 (기본 1.25). 어두운 스튜디오에서 밝은 전시장 느낌을 내려면 올린다.
     float         exposure;
+    /// 이 디스패치가 맡은 첫 행. 한 프레임을 **가로 띠 여러 개의 커맨드 버퍼**로 나눠 그린다 —
+    /// 무거운 씬(유리 수백 개 · 4 spp)을 한 버퍼로 그리면 GPU 워치독이 중간에 죽이고
+    /// ("Impacting Interactivity") 남은 타일이 쓰레기로 남는다. iOS 는 더 엄격하다.
+    unsigned int  rowOffset;
+    /// 최대 바운스 (기본 6). 유리가 수백 개인 씬은 4 로 — 스레드 하나가 너무 오래 돌면 GPU 가 죽인다.
+    unsigned int  maxBounces;
 } Uniforms;
 
 #endif /* ShaderTypes_h */

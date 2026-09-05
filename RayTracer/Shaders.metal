@@ -571,7 +571,7 @@ static void candRoundBox(float3 o, float3 d, float3 b, float r, thread Cands& c)
 // ---------------------------------------------------------------------------
 
 #define BLOB_MAX_ELEMS 48
-#define BLOB_MAX_STEPS 256
+#define BLOB_MAX_STEPS 160
 
 /// 둥근 원뿔(테이퍼진 캡슐)까지의 **정확한** 거리 (Inigo Quilez).
 /// 팔다리는 이걸로 만든다 — 구를 줄줄이 꿰면 간격이 반지름의 1.5배만 넘어도
@@ -728,7 +728,7 @@ static void candBlob(float3 o, float3 d, constant float4* D, thread Cands& c) {
     float u = -b - sq, uMax = -b + sq;      // 경계구 안 구간 (원점이 안이면 u 는 음수)
 
     // 스텝 수 × 최소 스텝 > 구간 길이 여야 실루엣에서 중도 포기하지 않는다
-    float minStep = max(0.0025f, (uMax - u) * 0.0045f);
+    float minStep = max(0.0025f, (uMax - u) * 0.0075f);   // 160 스텝 × 0.0075 > 구간 길이
     float sPrev = blobSDF(o + dn * u, D, n, inflate);
 
     for (int i = 0; i < BLOB_MAX_STEPS && u < uMax && c.n < MAX_CANDS; i++) {
@@ -1365,9 +1365,10 @@ static float3 shadePixel(float2 uv, constant Uniforms& u,
     float3 throughput = float3(1);
     const float3 primaryDir = r.direction;
     float primaryT = -1.0f;
+    const int maxB = (u.maxBounces > 0u) ? min((int)u.maxBounces, MAX_BOUNCES) : MAX_BOUNCES;
 
     int bounce = 0;
-    for (; bounce < MAX_BOUNCES; bounce++) {
+    for (; bounce < maxB; bounce++) {
         SurfaceHit h = traceScene(r, accel, funcTable, instances);
         if (bounce == 0 && h.valid) primaryT = h.t;
         if (!h.valid) {
@@ -1383,7 +1384,7 @@ static float3 shadePixel(float2 uv, constant Uniforms& u,
             float cosV = clamp(-dot(r.direction, h.n), 0.0f, 1.0f);
             float F = coatFresnel(cosV, mat.gloss);
             result += throughput * (1.0f - F) * direct;
-            if (F > 0.015f && bounce + 1 < MAX_BOUNCES) {
+            if (F > 0.015f && bounce + 1 < maxB) {
                 throughput *= F;
                 r.origin = h.pos + h.n * 0.003f;
                 r.direction = reflect(r.direction, h.n);
@@ -1411,7 +1412,7 @@ static float3 shadePixel(float2 uv, constant Uniforms& u,
             // 금속은 확산이 거의 없다 — 바탕은 반만 남기고 나머지는 반사가 맡는다
             float3 direct = shadeSurface(h, r.direction, u, accel, funcTable, materials);
             result += throughput * (float3(1.0f) - F) * direct * 0.5f;
-            if (bounce + 1 < MAX_BOUNCES) {
+            if (bounce + 1 < maxB) {
                 throughput *= F;
                 r.origin = h.pos + h.n * 0.003f;
                 r.direction = reflect(r.direction, h.n);
@@ -1465,7 +1466,7 @@ static float3 shadePixel(float2 uv, constant Uniforms& u,
     // 바운스 예산이 바닥나서 끝났다면 **남은 에너지를 하늘로 근사**한다.
     // 그냥 버리면 유리를 여러 겹 통과하는 픽셀이 까맣게 죽어 전체가 탁해진다
     // (유리 버스처럼 온통 투명한 씬에서 특히 심하다).
-    if (bounce == MAX_BOUNCES) {
+    if (bounce == maxB) {
         result += throughput * skyColor(r.direction, u.lightDir, u.envMode);
     }
 
@@ -1484,22 +1485,26 @@ kernel void rtKernel(uint2 tid                                        [[thread_p
                      intersection_function_table<instancing> funcTable [[buffer(2)]],
                      constant InstanceData*                instances  [[buffer(3)]],
                      constant Material*                    materials  [[buffer(4)]],
+                     device float4*                        accum      [[buffer(5)]],
                      texture2d<float, access::write>       outTexture [[texture(0)]])
 {
+    tid.y += u.rowOffset;                      // 띠 디스패치 — 실제 픽셀 행으로
     if (tid.x >= u.width || tid.y >= u.height) return;
 
-    // 슈퍼샘플링: spp = 4 면 픽셀을 2×2 로 나눠 네 번 추적한다.
+    // 슈퍼샘플링: spp = 4 면 픽셀을 2×2 로 나눠 네 번 추적하되, **한 패스에 한 샘플**만.
     // 가는 철사·속눈썹·손가락처럼 픽셀보다 얇은 것은 이게 아니면 계단·점선이 된다.
     int n = (u.spp >= 4) ? 4 : 1;
-    float3 result = float3(0);
-    for (int i = 0; i < n; i++) {
-        float2 off = (n == 1) ? float2(0.5f)
-                              : float2((i & 1) ? 0.75f : 0.25f, (i & 2) ? 0.75f : 0.25f);
-        float2 uv = (float2(tid) + off) / float2(u.width, u.height);
-        uv = uv * 2.0f - 1.0f;
-        uv.y = -uv.y;
-        result += shadePixel(uv, u, accel, funcTable, instances, materials);
-    }
+    int i = (int)u.sampleIndex;
+    float2 off = (n == 1) ? float2(0.5f)
+                          : float2((i & 1) ? 0.75f : 0.25f, (i & 2) ? 0.75f : 0.25f);
+    float2 uv = (float2(tid) + off) / float2(u.width, u.height);
+    uv = uv * 2.0f - 1.0f;
+    uv.y = -uv.y;
+    float3 sample = shadePixel(uv, u, accel, funcTable, instances, materials);
+
+    uint idx = tid.y * u.width + tid.x;
+    float3 result = (i == 0) ? sample : accum[idx].xyz + sample;
+    if (i + 1 < n) { accum[idx] = float4(result, 1.0f); return; }   // 다음 패스가 이어 더한다
     result /= float(n);
 
     // 노출 + **화이트포인트 있는** Reinhard.

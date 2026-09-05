@@ -29,6 +29,8 @@ final class CSGScene {
         case face
         /// 붉은색·금색 파워드 아머
         case ironMan
+        /// 크리스털 샹들리에
+        case chandelier
         /// 얇은 금테 안경 — 제품 사진 구도
         case glasses
         /// 굵은 테 썬글라스 — 제품 사진 구도
@@ -49,6 +51,7 @@ final class CSGScene {
             case .turbofan:     return "터보팬 제트엔진 커터웨이"
             case .face:         return "여성 얼굴"
             case .ironMan:      return "아이언맨"
+            case .chandelier:   return "크리스털 샹들리에"
             case .glasses:      return "안경"
             case .sunglasses:   return "썬글라스"
             case .showcase:     return "부품 전시장"
@@ -72,6 +75,8 @@ final class CSGScene {
                 return "smooth-min 거리장으로 조각한 양식화 흉상 · 피부 산란 · 비등방 머리카락"
             case .ironMan:
                 return "붉은 캔디 도장 · 금색 거울 · 발광 눈과 아크 리액터 — 갑옷 판 60여 장"
+            case .chandelier:
+                return "깎은 크리스털 500여 개를 인스턴싱 · 베지에 황동 팔 · 촛불 발광"
             case .glasses:
                 return "라운드 검은 림 + 로즈골드 다리 · 베지에 튜브 · 굴절률 1.5 유리 렌즈"
             case .sunglasses:
@@ -92,6 +97,7 @@ final class CSGScene {
             case .turbofan:     return "airplane.circle.fill"   // fan.fill 은 iOS 16.4+ 라 배포 타깃(16.0)에서 빈칸이 된다
             case .face:         return "face.smiling"
             case .ironMan:      return "bolt.shield.fill"
+            case .chandelier:   return "sparkles"
             case .glasses:      return "eyeglasses"
             case .sunglasses:   return "sunglasses"
             case .showcase:     return "cube.transparent"
@@ -128,6 +134,8 @@ final class CSGScene {
     var samplesPerPixel: Int = 1
     /// 노출 배율. 기본 1.25.
     var exposure: Float = 1.25
+    /// 최대 바운스 (≤ 6). 유리가 수백 개인 씬은 4 — 스레드가 너무 오래 돌면 GPU 가 스레드그룹을 죽인다.
+    var maxBounces: Int = 6
     /// 태양(키 라이트) 방향. nil 이면 환경 기본값.
     /// **인물은 조명 방향이 곧 인상이다** — 머리 위에서 내리쬐면 눈확·코 밑에 검은 그림자가 앉아
     /// 누구든 해골처럼 보인다. 카메라 쪽 위에서 비추는 "뷰티 라이트"가 정석.
@@ -142,6 +150,7 @@ final class CSGScene {
         case .turbofan: buildTurbofan()
         case .face:     buildFace(eyewear: nil)
         case .ironMan:    buildIronMan()
+        case .chandelier: buildChandelier()
         case .glasses:    buildSpectacles()
         case .sunglasses: buildSquareSunglasses()
         case .showcase: buildShowcase()
@@ -449,6 +458,48 @@ final class CSGScene {
         exposure = 1.35
         samplesPerPixel = 4            // 패널 라인·볼트는 픽셀보다 가늘다
         sunDirection = simd_normalize(SIMD3<Float>(0.35, 0.85, 0.65))
+    }
+
+    // MARK: - 크리스털 샹들리에
+
+    private func buildChandelier() {
+        let m = Chandelier.Materials(
+            brass:   addMaterial([0.86, 0.64, 0.32], type: MATERIAL_SATIN, gloss: 0.85),
+            crystal: addMaterial([0.985, 0.99, 1.0], type: MATERIAL_GLASS, ior: 1.55),
+            candle:  addMaterial([0.96, 0.94, 0.88], gloss: 0.30, sss: 0.4),          // 밀랍
+            flame:   addMaterial([5.5, 3.6, 1.4], type: MATERIAL_EMISSIVE))            // 따뜻한 전구
+        let floor = addMaterial([0.05, 0.045, 0.045], gloss: 0.45, grain: 0.12)         // 어두운 대리석
+
+        objects = [
+            CSG.box(.scale(200, 0.2, 200), material: floor),   // 0
+            Chandelier.stem(m),                                // 1
+            Chandelier.arm(m),                                 // 2 ×8
+            Chandelier.pendant(m),                             // 3 ×84
+            Chandelier.bead(m),                                // 4 ×224
+            Chandelier.centerBall(m),                          // 5
+            Chandelier.chainLink(m),                           // 6 ×N
+        ]
+        placements = [Placement(objectIndex: 0, transform: .translate(0, -12, 0)),
+                      Placement(objectIndex: 1, transform: .identity),
+                      Placement(objectIndex: 5, transform: .identity)]
+        placements += Chandelier.armPlacements().map { Placement(objectIndex: 2, transform: $0) }
+        placements += Chandelier.pendantPlacements().map { Placement(objectIndex: 3, transform: $0) }
+        placements += Chandelier.beadPlacements().map { Placement(objectIndex: 4, transform: $0) }
+        for i in 0..<14 {
+            placements.append(Placement(objectIndex: 6,
+                transform: .translate(0, 5.3 + Float(i) * 0.36, 0) * .rotateY(Float(i % 2) * 90)))
+        }
+        print("샹들리에: 오브젝트 \(objects.count)개 · 인스턴스 \(placements.count)개")
+
+        focusCenter = [0, 0.3, 0]
+        focusRadius = 4.6
+        focusHalfHeight = 5.0
+        focusElevation = 0.04
+        minElevation = -0.3            // 샹들리에는 아래에서 올려다봐야 한다 — 바닥은 12 아래
+        environment = .studio          // 어두운 배경에 소프트박스 — 크리스털이 빛난다
+        exposure = 1.4
+        samplesPerPixel = 4            // 얇은 비즈 체인
+        maxBounces = 4                 // 유리 300개 × 6바운스는 스레드가 너무 길다
     }
 
     // MARK: - 안경 · 썬글라스 (제품 사진)

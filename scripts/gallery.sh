@@ -23,3 +23,4 @@ render face face 900 900 0.0 --eye 0.3,15.6,6.0 --look -0.02,15.3,0
 render glasses glasses 1200 750 0.0
 render sunglasses sunglasses 1200 750 0.0
 render showcase showcase 1200 750 0.0
+render chandelier chandelier 1200 780 0.0 --eye 7,-2.5,9 --look 0,0,0

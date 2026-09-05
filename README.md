@@ -10,12 +10,16 @@ Bézier tube, smooth-min metaballs …) intersected in closed form inside a cust
 
 <table>
 <tr>
+<td width="50%"><img src="docs/images/chandelier.png" alt="크리스털 샹들리에"><br><sub><b>크리스털 샹들리에</b> — 깎은 크리스털 450개(팔각기둥 ∩ 타원체)를 오브젝트 둘로 인스턴싱, 황동 팔은 베지에 튜브, 촛불은 발광. 유리마다 소프트박스가 반사·굴절로 얽힌다</sub></td>
 <td width="50%"><img src="docs/images/ironman.png" alt="파워드 아머 — 캔디 도장·새틴 금·발광 리액터·인스턴싱된 볼트"><br><sub><b>파워드 아머</b> — 캔디 도장 · 새틴 금속 · 발광 리액터 · 패널 라인과 인스턴싱된 볼트 50개</sub></td>
-<td width="50%"><img src="docs/images/turbofan.png" alt="터보팬 제트엔진 커터웨이"><br><sub><b>터보팬 제트엔진 커터웨이</b> — 블레이드 1,500장을 오브젝트 40개로 인스턴싱, 사분면 하나를 빼서 카울을 걷어낸 단면(절단면 색은 공짜)</sub></td>
 </tr>
 <tr>
+<td><img src="docs/images/turbofan.png" alt="터보팬 제트엔진 커터웨이"><br><sub><b>터보팬 제트엔진 커터웨이</b> — 블레이드 1,500장을 오브젝트 40개로 인스턴싱, 사분면 하나를 빼서 카울을 걷어낸 단면(절단면 색은 공짜)</sub></td>
 <td><img src="docs/images/watch.png" alt="기계식 시계 무브먼트"><br><sub><b>기계식 시계 무브먼트</b> — 기어 트레인 · 탈진기 · 헤어스프링 · 루비 보석. 전부 불리언 가공물, 스튜디오 소프트박스가 금속에 비친다</sub></td>
+</tr>
+<tr>
 <td><img src="docs/images/bus.png" alt="현대 슈퍼 에어로시티 시내버스"><br><sub><b>시내버스</b> — 민코프스키 둥근 상자 차체 · 실내와 좌석 · 유리 · 부품 62개</sub></td>
+<td><img src="docs/images/bus-glass.png" alt="유리 버스"><br><sub><b>유리 버스</b> — 같은 형상을 굴절·프레넬만으로. 재질 매핑만 바뀐다</sub></td>
 </tr>
 <tr>
 <td><img src="docs/images/face.png" alt="양식화 여성 흉상"><br><sub><b>인물 흉상</b> — smooth-min 거리장(메타볼 + 베지에 튜브)으로 조각, 피부 표면하 산란, 비등방 머리카락</sub></td>
@@ -26,8 +30,8 @@ Bézier tube, smooth-min metaballs …) intersected in closed form inside a cust
 <td><img src="docs/images/sunglasses.png" alt="스퀘어 썬글라스"><br><sub><b>썬글라스</b> — 베이스 커브를 준 렌즈에 높이 그라데이션 착색 유리</sub></td>
 </tr>
 <tr>
-<td><img src="docs/images/bus-glass.png" alt="유리 버스"><br><sub><b>유리 버스</b> — 같은 형상을 굴절·프레넬만으로. 재질 매핑만 바뀐다</sub></td>
 <td><img src="docs/images/showcase.png" alt="부품 전시장"><br><sub><b>부품 전시장</b> — 해석적 부품 16종 + 불리언 조립 · 거울과 유리</sub></td>
+<td><img src="docs/images/turbofan-front.png" alt="터보팬 정면 — 팬 블레이드"><br><sub><b>터보팬 정면</b> — 와이드 코드 팬 블레이드 22장, 스윕과 비틀림은 둥근 상자 조각을 겹쳐 쌓은 것</sub></td>
 </tr>
 </table>
 
@@ -43,7 +47,8 @@ Bézier tube, smooth-min metaballs …) intersected in closed form inside a cust
 | **구간 불리언** | 후위 표기 스택 머신이 레이 위의 구간 리스트에 `∪ ∩ −` 를 적용. 차집합의 절단면은 자르는 쪽 재질을 물려받는다 (커터웨이 단면 색이 공짜) |
 | **인스턴싱** | 오브젝트 하나 = AABB 하나 = 가속 구조 하나. 블레이드 1,500장·볼트 50개는 배치 변환만 다르다 |
 | **재질** | 확산(클리어코트 프레넬) · 거울 · 유리(스넬 + Schlick, 높이 그라데이션 착색) · **새틴 금속** · **머리카락**(Kajiya-Kay 비등방) · **발광** · 피부 **표면하 산란** 근사 |
-| **조명** | 야외 하늘 · 어두운 스튜디오 · 밝은 스튜디오 · 흰 사이클로라마, 면광원 소프트 섀도, 2×2 슈퍼샘플링, 씬별 노출 |
+| **조명** | 야외 하늘 · 어두운 스튜디오 · 밝은 스튜디오 · 흰 사이클로라마, 면광원 소프트 섀도, 2×2 슈퍼샘플링(패스 누적), 씬별 노출·최대 바운스 |
+| **GPU 워치독 대응** | 한 프레임을 **샘플 패스 × 가로 띠**의 커맨드 버퍼로 나눈다. 스레드 하나가 오래 돌면 GPU 가 스레드그룹을 소리 없이 죽여 흰 타일이 남는다 — 유리 450개짜리 샹들리에에서 배웠다 |
 | **A15 급 기기에서 동작** | intersection function 의 스레드 스택을 1.8 KB 로 눌러 iPhone 13 에서도 파이프라인이 만들어진다 |
 
 ## 빠른 시작

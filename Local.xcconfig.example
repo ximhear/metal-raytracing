@@ -1,0 +1,12 @@
+// 머신마다 다른 서명 설정. 이 파일을 Local.xcconfig 로 복사해서 값을 채운다.
+//
+// XcodeGen 은 .xcodeproj 를 통째로 다시 만들지만 이 파일은 건드리지 않으므로,
+// `make project` 를 몇 번을 해도 팀 설정이 살아남는다.
+// Xcode 의 Signing & Capabilities 에서 고른 값은 pbxproj 에 쓰이므로 다음 생성 때 날아간다 —
+// 팀을 바꿀 때는 UI 가 아니라 `make team TEAM=XXXXXXXXXX` 를 쓸 것.
+
+// 실기기 빌드에 필요. `make team` 으로 이 Mac 에서 쓸 수 있는 팀 ID 목록을 볼 수 있다.
+DEVELOPMENT_TEAM =
+
+// 번들 ID 앞부분. 무료(개인) 팀이라 ID 가 겹치면 여기만 바꾸면 된다.
+BUNDLE_ID_PREFIX = com.gzonelee

@@ -1,0 +1,13 @@
+# XcodeGen 이 생성 — project.yml 이 원본
+RayTracer.xcodeproj/
+Generated/
+
+# 머신마다 다른 서명 설정 (Local.xcconfig.example 이 템플릿)
+Local.xcconfig
+
+build/
+out/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store

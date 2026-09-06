@@ -56,11 +56,18 @@ enum Snapshot {
             renderer.cameraOverride = Renderer.CameraOverride(
                 eye: eye, target: vector(named: "--look", in: args) ?? SIMD3<Float>(0, -1, 0))
         }
-        guard let (pixels, bytesPerRow) = renderer.renderOffscreen(width: width, height: height, time: time) else {
-            fail("오프스크린 렌더링 실패")
+        do {
+            let request = try renderer.makeRequest(width: width, height: height, time: time)
+            let result = try renderer.renderOffscreen(request)
+            if let warning = result.outcome.warning {
+                if args.contains("--strict-csg") { fail(warning) }
+                FileHandle.standardError.write((warning + "\n").data(using: .utf8)!)
+            }
+            write(pixels: result.pixels, bytesPerRow: result.bytesPerRow,
+                  width: width, height: height, to: path)
+        } catch {
+            fail(error.localizedDescription)
         }
-
-        write(pixels: pixels, bytesPerRow: bytesPerRow, width: width, height: height, to: path)
         FileHandle.standardError.write("snapshot: \(path) (\(width)x\(height), t=\(time), scene=\(kind.rawValue), gpu=\(device.name))\n".data(using: .utf8)!)
         exit(0)
     }

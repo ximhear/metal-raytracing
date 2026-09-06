@@ -5,6 +5,7 @@
 #   make ios          iOS 앱 빌드 (서명 없이 컴파일 검증)
 #   make run          macOS 앱 실행 (창 띄움)
 #   make snapshot     오프스크린 한 프레임 → out/frame.png
+#   make test         macOS 회귀 테스트 (Metal 가능한 Mac)
 #   make gallery      README 갤러리 이미지 전부 다시 렌더 (docs/images)
 #   make open         Xcode 로 열기
 #   make clean
@@ -22,6 +23,8 @@ W         ?= 900
 H         ?= 560
 T         ?= 0.0
 SCENE     ?= bus
+# 1이면 CSG 구간 초과도 스냅샷 실패로 처리
+STRICT_CSG ?= 0
 # 카메라 직접 지정 (모델 검수용). 예: make snapshot EYE=-6,0,-1 LOOK=-0.5,-1.4,-4.2
 EYE       ?=
 LOOK      ?=
@@ -69,7 +72,7 @@ run: mac
 
 snapshot: mac
 	@mkdir -p $(dir $(OUT))
-	$(MAC_BIN) --snapshot $(OUT) $(W) $(H) $(T) $(CAM)
+	$(MAC_BIN) --snapshot $(OUT) $(W) $(H) $(T) $(CAM) $(if $(filter 1,$(STRICT_CSG)),--strict-csg)
 
 open: $(PROJECT)
 	open $(PROJECT)
@@ -79,3 +82,9 @@ clean:
 
 gallery: mac
 	@scripts/gallery.sh
+
+.PHONY: test
+test: $(PROJECT)
+	xcodebuild -project $(PROJECT) -scheme RayTracer-macOS -configuration Debug \
+		-destination 'platform=macOS' -derivedDataPath $(DD) \
+		CODE_SIGNING_ALLOWED=NO test

@@ -36,7 +36,8 @@ struct Interval {
 
 struct IntervalList {
     Interval iv[MAX_INTERVALS];
-    int      count;
+    ushort   count;
+    ushort   overflow; // count의 남는 16비트를 사용해 구조체 크기(220B)를 유지
 };
 
 struct Hit { float t; packed_float3 n; };   // 32B → 16B (위와 같은 이유)
@@ -52,6 +53,7 @@ struct Cands {
 // float3(16B 정렬)로 되돌리면 Interval 64B / IntervalList 400B 가 되어
 // A15 급 기기에서 "Compute pipeline exceeds available stack space" 로 파이프라인 생성이 실패한다.
 static_assert(sizeof(Interval) == 36, "Interval 이 커졌다 — packed_float3 / ushort 를 유지할 것");
+static_assert(sizeof(IntervalList) == 220, "IntervalList 스택 크기를 유지할 것");
 static_assert(sizeof(Hit) == 16, "Hit 이 커졌다 — packed_float3 를 유지할 것");
 
 struct CSGPayload {
@@ -65,6 +67,7 @@ static inline void addCand(thread Cands& c, float t, float3 n) {
 
 static inline void pushInterval(thread IntervalList& L, Interval iv) {
     if (L.count < MAX_INTERVALS) { L.iv[L.count] = iv; L.count++; }
+    else { L.overflow = 1; }
 }
 
 // ---------------------------------------------------------------------------
@@ -763,6 +766,7 @@ static void partIntervals(constant CSGNode& node, float3 o, float3 d, uint mater
                           constant float4* partData, thread IntervalList& L)
 {
     L.count = 0;
+    L.overflow = 0;
 
     // 오브젝트 공간 → 부품 로컬 공간
     float4x4 M = node.worldToLocal;
@@ -852,6 +856,7 @@ static void opUnion(thread const IntervalList& A, thread const IntervalList& B,
                     thread IntervalList& R)
 {
     R.count = 0;
+    R.overflow = A.overflow | B.overflow;
     int i = 0, j = 0;
     Interval cur;
     bool has = false;
@@ -875,6 +880,7 @@ static void opIntersect(thread const IntervalList& A, thread const IntervalList&
                         thread IntervalList& R)
 {
     R.count = 0;
+    R.overflow = A.overflow | B.overflow;
     for (int i = 0; i < A.count; i++) {
         for (int j = 0; j < B.count; j++) {
             Interval a = A.iv[i], b = B.iv[j];
@@ -888,16 +894,17 @@ static void opIntersect(thread const IntervalList& A, thread const IntervalList&
     }
 }
 
-// A - B : 깎인 면은 A의 재질을 유지하고, 법선은 B의 법선을 뒤집어 사용
+// A - B : 깎인 면은 B의 재질을 사용하고, 법선은 B의 법선을 뒤집어 사용
 // R 은 A/B 와 겹치면 안 된다 (호출부에서 별도 슬롯을 넘긴다).
 // 결과를 R 에 바로 누적해서 `cur` 사본 하나(IntervalList 통째)를 아낀다.
 static void opSubtract(thread const IntervalList& A, thread const IntervalList& B,
                        thread IntervalList& R)
 {
     R = A;
+    R.overflow |= B.overflow;
     for (int j = 0; j < B.count; j++) {
         Interval b = B.iv[j];
-        IntervalList nxt; nxt.count = 0;
+        IntervalList nxt; nxt.count = 0; nxt.overflow = R.overflow;
         for (int i = 0; i < R.count; i++) {
             Interval a = R.iv[i];
             if (b.tOut <= a.tIn || b.tIn >= a.tOut) {      // 겹치지 않음
@@ -977,7 +984,8 @@ BBoxResult csgIntersection(float3 origin              [[origin]],
                            constant CSGNode*   nodes         [[buffer(0)]],
                            constant CSGObject* objects       [[buffer(1)]],
                            constant uint*      instanceObject[[buffer(2)]],
-                           constant float4*    partData      [[buffer(3)]])
+                           constant float4*    partData      [[buffer(3)]],
+                           device atomic_uint* overflows     [[buffer(4)]])
 {
     BBoxResult res;
     res.accept = false;
@@ -986,7 +994,11 @@ BBoxResult csgIntersection(float3 origin              [[origin]],
     CSGObject obj = objects[instanceObject[instanceId]];
 
     IntervalList L;
-    if (!evalCSG(nodes + obj.nodeOffset, obj.nodeCount, origin, direction, partData, L)) return res;
+    L.overflow = 0;
+    bool hit = evalCSG(nodes + obj.nodeOffset, obj.nodeCount, origin, direction, partData, L);
+    // 프레임별·오브젝트별 진단. IntervalList 크기는 그대로 유지한다.
+    if (L.overflow) atomic_fetch_add_explicit(overflows + instanceObject[instanceId], 1u, memory_order_relaxed);
+    if (!hit) return res;
 
     // minDist 이후 첫 경계 찾기
     for (int i = 0; i < L.count; i++) {

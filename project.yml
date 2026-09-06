@@ -73,3 +73,25 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).RayTracer
         # 샌드박스 없이 로컬 실행 (필요해지면 entitlements 추가)
         ENABLE_HARDENED_RUNTIME: NO
+
+  RayTracerTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: RayTracer-macOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.gzonelee.RayTracerTests
+
+schemes:
+  RayTracer-macOS:
+    build:
+      targets:
+        RayTracer-macOS: all
+    test:
+      targets:
+        - RayTracerTests

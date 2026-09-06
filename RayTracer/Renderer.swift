@@ -15,6 +15,7 @@ import simd
 enum RendererError: LocalizedError {
     case noRaytracingSupport(String)
     case noCommandQueue
+    case renderFailed(String)
     case noDefaultLibrary
     case missingFunction(String)
     case pipelineFailed(String)
@@ -27,6 +28,8 @@ enum RendererError: LocalizedError {
         switch self {
         case .noRaytracingSupport(let gpu):
             return "이 GPU 는 Metal Ray Tracing 미지원: \(gpu)\nA13/M1 이상 실기기가 필요합니다 (시뮬레이터 불가)."
+        case .renderFailed(let why):
+            return "렌더링 실패: \(why)"
         case .noCommandQueue:
             return "MTLCommandQueue 생성 실패"
         case .noDefaultLibrary:
@@ -52,11 +55,11 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
     let device: MTLDevice
     private let queue: MTLCommandQueue
     private let pipeline: MTLComputePipelineState
-    private let functionTable: MTLIntersectionFunctionTable
+    private let displayCompletionQueue = DispatchQueue(label: "RayTracer.displayCompletion", qos: .userInitiated)
+    private let intersectionHandle: MTLFunctionHandle
 
     /// 화면 구석 HUD 용. "정말 그리고 있는지" 를 흰 화면과 구분하기 위한 것.
     @Published private(set) var hud: String = "첫 프레임 대기 중…"
-    private var lastGPUms: Double = 0
     /// 저장 해상도를 화면 비율에 맞추기 위해 기억해 둔다
     private(set) var lastDrawableSize: (width: Int, height: Int) = (0, 0)
 
@@ -122,7 +125,11 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
 
     private static let fovDegrees: Float = 50
 
-    init(device: MTLDevice, scene sceneKind: CSGScene.Kind) throws {
+    convenience init(device: MTLDevice, scene sceneKind: CSGScene.Kind) throws {
+        try self.init(device: device, scene: CSGScene(sceneKind))
+    }
+
+    init(device: MTLDevice, scene: CSGScene) throws {
         guard device.supportsRaytracing else { throw RendererError.noRaytracingSupport(device.name) }
         self.device = device
         guard let queue = device.makeCommandQueue() else { throw RendererError.noCommandQueue }
@@ -151,7 +158,6 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         self.pipeline = pipeline
 
         // ---- 씬 데이터 평탄화 ----
-        let scene = CSGScene(sceneKind)
         focusCenter = scene.focusCenter
         focusRadius = scene.focusRadius
         environment = scene.environment
@@ -190,8 +196,14 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         let materials = scene.materials
 
         func makeBuffer<T>(_ array: [T]) -> MTLBuffer? {
-            device.makeBuffer(bytes: array, length: MemoryLayout<T>.stride * max(array.count, 1),
-                              options: .storageModeShared)
+            // 빈 추가 파라미터 배열의 포인터에서 한 원소를 읽지 않는다.
+            if array.isEmpty {
+                return device.makeBuffer(length: MemoryLayout<T>.stride, options: .storageModeShared)
+            }
+            return array.withUnsafeBufferPointer { buffer in
+                device.makeBuffer(bytes: buffer.baseAddress!, length: MemoryLayout<T>.stride * buffer.count,
+                                  options: .storageModeShared)
+            }
         }
         guard let nb = makeBuffer(nodes) else { throw RendererError.bufferFailed("nodes") }
         guard let ob = makeBuffer(objects) else { throw RendererError.bufferFailed("objects") }
@@ -202,18 +214,10 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         nodeBuffer = nb; objectBuffer = ob; instanceObjectBuffer = iob
         instanceDataBuffer = idb; materialBuffer = mb; partDataBuffer = pdb
 
-        // ---- Intersection function table ----
-        let tDesc = MTLIntersectionFunctionTableDescriptor()
-        tDesc.functionCount = 1
-        guard let table = pipeline.makeIntersectionFunctionTable(descriptor: tDesc),
-              let handle = pipeline.functionHandle(function: csgFunction)
-        else { throw RendererError.functionTableFailed }
-        table.setFunction(handle, index: 0)
-        table.setBuffer(nodeBuffer, offset: 0, index: 0)
-        table.setBuffer(objectBuffer, offset: 0, index: 1)
-        table.setBuffer(instanceObjectBuffer, offset: 0, index: 2)
-        table.setBuffer(partDataBuffer, offset: 0, index: 3)
-        functionTable = table
+        guard let handle = pipeline.functionHandle(function: csgFunction) else {
+            throw RendererError.functionTableFailed
+        }
+        intersectionHandle = handle
 
         super.init()
         try buildAccelerationStructures(bounds: bounds, placements: scene.placements)
@@ -303,7 +307,7 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
 
     /// 카메라 상태 → Uniforms **값**.
     /// 예전처럼 인스턴스 프로퍼티를 고쳐 쓰면 화면 렌더링과 백그라운드 저장이 같은 값을 밟는다.
-    private func makeUniforms(width: Int, height: Int, time: Float? = nil) -> Uniforms {
+    private func makeUniforms(width: Int, height: Int, time: Float? = nil, fullQuality: Bool) -> Uniforms {
         // 스냅샷은 time 으로 방위각을 직접 준다 (`make snapshot T=...`)
         let az = time ?? camera.azimuth
         let el = camera.elevation
@@ -340,8 +344,8 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         u.aspect = aspect
         u.tanHalfFov = tanHalfFov
         u.envMode = environment.rawValue
-        u.shadowSoftness = interacting ? 0 : shadowSoftness
-        u.spp = UInt32(interacting ? 1 : samplesPerPixel)
+        u.shadowSoftness = !fullQuality && interacting ? 0 : shadowSoftness
+        u.spp = !fullQuality && interacting ? 1 : (samplesPerPixel >= 4 ? 4 : 1)
         u.exposure = exposure
         u.maxBounces = UInt32(maxBounces)
         u.fogStart = fogStart
@@ -352,65 +356,110 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
 
     /// 커널 한 번 디스패치. drawable 이든 오프스크린 텍스처든 동일한 경로를 쓴다.
     /// 한 띠의 행 수. 무거운 씬에서도 띠 하나가 워치독(수백 ms) 안에 끝나야 한다.
-    private let bandRows = 128
+    private let maxBandRows = 128
+    private let maxBandPixels = 32768
 
-    /// 샘플 누적 버퍼 (float4 × 픽셀). 슈퍼샘플링 패스가 여기에 더한다. 크기가 모자라면 다시 만든다.
-    private var accumBuffer: MTLBuffer?
-    private func accumulator(pixels: Int) -> MTLBuffer? {
-        let bytes = pixels * MemoryLayout<SIMD4<Float>>.stride
-        if let b = accumBuffer, b.length >= bytes { return b }
-        accumBuffer = device.makeBuffer(length: bytes, options: .storageModePrivate)
-        return accumBuffer
+    /// 메인 스레드에서 카메라를 한 번 캡처한다. 이후 GPU 작업은 이 값만 읽는다.
+    struct Request {
+        fileprivate let uniforms: Uniforms
+        let cameraSummary: String
+        var width: Int { Int(uniforms.width) }
+        var height: Int { Int(uniforms.height) }
     }
 
-    /// 텍스처 전체를 **샘플 패스 × 가로 띠**로 나눠 각각 별도 커맨드 버퍼로 그린다.
-    /// 스레드 하나는 한 샘플만 계산한다 — 커널 안에서 4샘플을 돌면 GPU 가 스레드그룹을 소리 없이 죽인다.
-    /// `each` 는 커밋 직전에 (버퍼, 마지막인가) 로 불린다 — present·완료 핸들러는 여기서 건다.
-    @discardableResult
-    private func encodeBanded(texture tex: MTLTexture, time: Float? = nil,
-                              each: ((MTLCommandBuffer, Bool) -> Void)? = nil) -> MTLCommandBuffer? {
-        let samples = interacting ? 1 : max(1, samplesPerPixel)
-        guard let acc = accumulator(pixels: tex.width * tex.height) else { return nil }
-        var lastCmd: MTLCommandBuffer?
-        for sample in 0..<samples {
-            var row = 0
-            while row < tex.height {
-                guard let cmd = queue.makeCommandBuffer() else { return lastCmd }
-                let rows = min(bandRows, tex.height - row)
-                encode(into: cmd, texture: tex, accum: acc, time: time,
-                       rowOffset: row, rows: rows, sampleIndex: sample)
-                row += rows
-                each?(cmd, sample == samples - 1 && row >= tex.height)
+    func makeRequest(width: Int, height: Int, time: Float? = nil,
+                     fullQuality: Bool = true) throws -> Request {
+        dispatchPrecondition(condition: .onQueue(.main))
+        // Metal 텍스처를 만들기 전에 잘못된 CLI 입력과 크기 곱셈 오버플로를 막는다.
+        guard width > 0, height > 0, width <= 16384, height <= 16384 else {
+            throw RendererError.renderFailed("해상도는 각 변 1...16384 이어야 합니다")
+        }
+        return Request(uniforms: makeUniforms(width: width, height: height, time: time,
+                                             fullQuality: fullQuality), cameraSummary: cameraSummary)
+    }
+
+    /// 프레임마다 별도 누적 버퍼와 진단 버퍼/함수 테이블을 사용한다.
+    /// 화면과 저장 커맨드가 같은 큐에 섞여 제출돼도 서로의 샘플을 덮지 않는다.
+    private struct Batch {
+        let commands: [MTLCommandBuffer]
+        let diagnostics: MTLBuffer
+        let objectCount: Int
+
+        func wait() throws -> FrameOutcome {
+            var outcome = FrameOutcome()
+            for cmd in commands {
+                cmd.waitUntilCompleted()
+                outcome.record(status: cmd.status, error: cmd.error,
+                               milliseconds: (cmd.gpuEndTime - cmd.gpuStartTime) * 1000,
+                               label: cmd.label ?? "GPU command")
+            }
+            try outcome.check()
+            let counts = diagnostics.contents().bindMemory(to: UInt32.self, capacity: objectCount)
+            outcome.intervalOverflows = (0..<objectCount).compactMap {
+                counts[$0] == 0 ? nil : "오브젝트 \($0): \(counts[$0])회"
+            }
+            return outcome
+        }
+    }
+
+    private func encodeBanded(texture tex: MTLTexture, request: Request) throws -> Batch {
+        guard let acc = device.makeBuffer(length: tex.width * tex.height * MemoryLayout<SIMD4<Float>>.stride,
+                                          options: .storageModePrivate),
+              let diagnostics = device.makeBuffer(length: primitiveAccels.count * MemoryLayout<UInt32>.stride,
+                                                   options: .storageModeShared) else {
+            throw RendererError.bufferFailed("프레임 누적/진단 버퍼")
+        }
+        memset(diagnostics.contents(), 0, diagnostics.length)
+        let descriptor = MTLIntersectionFunctionTableDescriptor()
+        descriptor.functionCount = 1
+        guard let table = pipeline.makeIntersectionFunctionTable(descriptor: descriptor) else {
+            throw RendererError.functionTableFailed
+        }
+        table.setFunction(intersectionHandle, index: 0)
+        for (i, buffer) in [nodeBuffer, objectBuffer, instanceObjectBuffer, partDataBuffer, diagnostics].enumerated() {
+            table.setBuffer(buffer, offset: 0, index: i)
+        }
+        let bandRows = min(maxBandRows, max(1, maxBandPixels / tex.width))
+        var commands: [MTLCommandBuffer] = []
+        for sample in 0..<Int(request.uniforms.spp) {
+            for row in stride(from: 0, to: tex.height, by: bandRows) {
+                guard let cmd = queue.makeCommandBuffer() else {
+                    throw RendererError.renderFailed("커맨드 버퍼 생성 (sample \(sample), row \(row))")
+                }
+                cmd.label = "sample \(sample), row \(row)"
+                try encode(into: cmd, texture: tex, accum: acc, table: table, diagnostics: diagnostics,
+                           uniforms: request.uniforms, rowOffset: row,
+                           rows: min(bandRows, tex.height - row), sampleIndex: sample)
                 cmd.commit()
-                lastCmd = cmd
+                commands.append(cmd)
             }
         }
-        return lastCmd
+        return Batch(commands: commands, diagnostics: diagnostics, objectCount: primitiveAccels.count)
     }
 
     private func encode(into cmd: MTLCommandBuffer, texture tex: MTLTexture, accum: MTLBuffer,
-                        time: Float? = nil, rowOffset: Int = 0, rows: Int? = nil, sampleIndex: Int = 0) {
-        guard let enc = cmd.makeComputeCommandEncoder() else { return }
-        var u = makeUniforms(width: tex.width, height: tex.height, time: time)
+                        table: MTLIntersectionFunctionTable, diagnostics: MTLBuffer,
+                        uniforms: Uniforms, rowOffset: Int, rows: Int, sampleIndex: Int) throws {
+        guard let enc = cmd.makeComputeCommandEncoder() else {
+            throw RendererError.renderFailed("컴퓨트 인코더 생성 (\(cmd.label ?? ""))")
+        }
+        var u = uniforms
         u.rowOffset = UInt32(rowOffset)
         u.sampleIndex = UInt32(sampleIndex)
-
         enc.setComputePipelineState(pipeline)
         enc.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
         enc.setAccelerationStructure(instanceAccel, bufferIndex: 1)
-        enc.setIntersectionFunctionTable(functionTable, bufferIndex: 2)
+        enc.setIntersectionFunctionTable(table, bufferIndex: 2)
         enc.setBuffer(instanceDataBuffer, offset: 0, index: 3)
         enc.setBuffer(materialBuffer, offset: 0, index: 4)
         enc.setBuffer(accum, offset: 0, index: 5)
         enc.setTexture(tex, index: 0)
-
-        // 인스턴스 가속 구조가 참조하는 하위 구조 + function table이 쓰는 버퍼는 useResource 필수
         enc.useResources(primitiveAccels, usage: .read)
         enc.useResources([nodeBuffer, objectBuffer, instanceObjectBuffer, partDataBuffer], usage: .read)
-
+        enc.useResource(diagnostics, usage: [.read, .write])
         let w = pipeline.threadExecutionWidth
         let h = pipeline.maxTotalThreadsPerThreadgroup / w
-        enc.dispatchThreads(MTLSize(width: tex.width, height: rows ?? tex.height, depth: 1),
+        enc.dispatchThreads(MTLSize(width: tex.width, height: rows, depth: 1),
                             threadsPerThreadgroup: MTLSize(width: w, height: h, depth: 1))
         enc.endEncoding()
     }
@@ -421,36 +470,39 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
                camera.azimuth * 180 / .pi, camera.elevation * 180 / .pi, 1 / camera.zoom)
     }
 
-    /// 오프스크린으로 한 프레임 렌더링해서 BGRA8 픽셀을 돌려준다 (스냅샷/검증용).
-    func renderOffscreen(width: Int, height: Int, time: Float? = nil) -> (pixels: [UInt8], bytesPerRow: Int)? {
+    struct Pixels {
+        let pixels: [UInt8]
+        let bytesPerRow: Int
+        let outcome: FrameOutcome
+    }
+
+    /// 백그라운드에서도 호출 가능. 카메라 등 변경 가능한 UI 상태에는 접근하지 않는다.
+    func renderOffscreen(_ request: Request) throws -> Pixels {
+        let width = request.width, height = request.height
         let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
                                                             width: width, height: height, mipmapped: false)
         desc.usage = [.shaderWrite, .shaderRead]
         desc.storageMode = .shared
-        guard let tex = device.makeTexture(descriptor: desc) else { return nil }
-
-        guard let cmd = encodeBanded(texture: tex, time: time) else { return nil }
-        cmd.waitUntilCompleted()
-        if let error = cmd.error {
-            // GPU 가 중간에 죽으면(타임아웃·폴트) 텍스처의 남은 타일이 쓰레기로 남는다 — 조용히 넘기지 않는다
-            FileHandle.standardError.write("⚠️ GPU 커맨드 실패: \(error.localizedDescription) (status \(cmd.status.rawValue))\n".data(using: .utf8)!)
+        guard let tex = device.makeTexture(descriptor: desc) else {
+            throw RendererError.renderFailed("오프스크린 텍스처 할당")
         }
-
+        let outcome = try encodeBanded(texture: tex, request: request).wait()
         let bytesPerRow = width * 4
         var pixels = [UInt8](repeating: 0, count: bytesPerRow * height)
         pixels.withUnsafeMutableBytes { buf in
             tex.getBytes(buf.baseAddress!, bytesPerRow: bytesPerRow,
                          from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
         }
-        return (pixels, bytesPerRow)
+        return Pixels(pixels: pixels, bytesPerRow: bytesPerRow, outcome: outcome)
     }
 
-    /// 현재 카메라 그대로 고해상도 이미지를 만든다 (저장용).
-    /// GPU 를 기다리므로 **백그라운드 큐에서 부를 것** — 큰 해상도는 몇 초 걸린다.
-    func makeImage(width: Int, height: Int) -> CGImage? {
-        guard let (pixels, bytesPerRow) = renderOffscreen(width: width, height: height) else { return nil }
-        return ImageExport.makeImage(pixels: pixels, bytesPerRow: bytesPerRow,
-                                     width: width, height: height)
+    func makeImage(_ request: Request) throws -> (image: CGImage, warning: String?) {
+        let result = try renderOffscreen(request)
+        guard let image = ImageExport.makeImage(pixels: result.pixels, bytesPerRow: result.bytesPerRow,
+                                                width: request.width, height: request.height) else {
+            throw RendererError.renderFailed("CGImage 생성")
+        }
+        return (image, result.outcome.warning)
     }
 
     /// 저장용 권장 해상도 — 화면 비율을 유지한 채 긴 변을 2400 으로.
@@ -480,25 +532,25 @@ final class Renderer: NSObject, MTKViewDelegate, ObservableObject {
         }
         let tex = drawable.texture
         lastDrawableSize = (tex.width, tex.height)
-        // 띠마다 커맨드 버퍼 하나 — 무거운 씬이 워치독에 걸리지 않는다. 마지막 띠가 present 한다.
-        final class Acc { var ms = 0.0 }
-        let acc = Acc()
-        encodeBanded(texture: tex) { [weak self] cmd, isLast in
-            cmd.addCompletedHandler { buffer in
-                guard let self else { return }
-                if let error = buffer.error {
-                    self.publishHUD("GPU 에러: \(error.localizedDescription)")
-                    return
+        do {
+            let request = try makeRequest(width: tex.width, height: tex.height, fullQuality: false)
+            let batch = try encodeBanded(texture: tex, request: request)
+            displayCompletionQueue.async { [weak self] in
+                do {
+                    let outcome = try batch.wait()
+                    // 모든 띠의 성공을 확인한 뒤에만 화면에 표시한다.
+                    drawable.present()
+                    guard let self else { return }
+                    let text = String(format: "%dx%d  %.1f ms  %@  |  %@",
+                                      tex.width, tex.height, outcome.milliseconds,
+                                      self.device.name, request.cameraSummary)
+                    self.publishHUD(text + (outcome.warning.map { " | " + $0 } ?? ""))
+                } catch {
+                    self?.publishHUD(error.localizedDescription)
                 }
-                acc.ms += (buffer.gpuEndTime - buffer.gpuStartTime) * 1000
-                guard isLast else { return }
-                // 요청 시에만 그리므로 fps 는 의미가 없다 — GPU 프레임 시간(띠 합)을 보여 준다
-                self.lastGPUms = acc.ms
-                self.publishHUD(String(format: "%dx%d  %.1f ms  %@  |  %@",
-                                       tex.width, tex.height, self.lastGPUms,
-                                       self.device.name, self.cameraSummary))
             }
-            if isLast { cmd.present(drawable) }
+        } catch {
+            publishHUD(error.localizedDescription)
         }
     }
 

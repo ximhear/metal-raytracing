@@ -278,17 +278,28 @@ private struct RenderSurface: View {
         saving = true
         message = nil
         let size = renderer.suggestedSaveSize()
+        let request: Renderer.Request
+        do {
+            // 저장 버튼을 누른 시점의 카메라와 풀 품질을 고정한다.
+            request = try renderer.makeRequest(width: size.width, height: size.height)
+        } catch {
+            saving = false
+            message = error.localizedDescription
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let image = renderer.makeImage(width: size.width, height: size.height) else {
+            do {
+                let result = try renderer.makeImage(request)
+                ImageExport.save(result.image) { status in
+                    saving = false
+                    message = "\(status)  (\(size.width)x\(size.height))"
+                        + (result.warning.map { " | " + $0 } ?? "")
+                }
+            } catch {
                 DispatchQueue.main.async {
                     saving = false
-                    message = "렌더링 실패"
+                    message = error.localizedDescription
                 }
-                return
-            }
-            ImageExport.save(image) { result in
-                saving = false
-                message = "\(result)  (\(size.width)x\(size.height))"
             }
         }
     }
